@@ -59,7 +59,13 @@ function defaultReducedMotion(): boolean {
 export function createRippleAnimator(options: RippleOptions): RippleAnimator {
   const prefersReducedMotion = options.prefersReducedMotion ?? defaultReducedMotion;
   let generation = 0;
-  let group: ZiplineGroup | null = null;
+  /**
+   * Every group currently mounted. Runs overlap: a stale one is still
+   * awaiting its own `play()` when the run that replaced it mounts the next
+   * group, so ownership has to be explicit — each controller is destroyed
+   * exactly once, by whichever of the two reaches it first.
+   */
+  const live = new Set<ZiplineGroup>();
   let running = false;
   let destroyed = false;
 
@@ -75,9 +81,13 @@ export function createRippleAnimator(options: RippleOptions): RippleAnimator {
     return map;
   }
 
+  function release(group: ZiplineGroup): void {
+    if (!live.delete(group)) return;
+    group.destroy();
+  }
+
   function teardown(): void {
-    group?.destroy();
-    group = null;
+    for (const group of Array.from(live)) release(group);
     running = false;
   }
 
@@ -132,19 +142,18 @@ export function createRippleAnimator(options: RippleOptions): RippleAnimator {
       if (lines.length === 0) continue;
 
       if (token !== generation || destroyed) return;
-      group = createZiplineGroup({ ...PULSE, dt: HOP_SECONDS, lines }).mount(
+      const group = createZiplineGroup({ ...PULSE, dt: HOP_SECONDS, lines }).mount(
         options.overlay(),
       );
+      live.add(group);
       await group.play();
-      // The await yields; a newer edit may have landed meanwhile.
-      if (token !== generation || destroyed) {
-        teardown();
-        return;
-      }
-      group.destroy();
-      group = null;
+      release(group);
+      // The await yields, so a newer edit may have landed meanwhile. It owns
+      // `running` from here: a stale run leaves quietly rather than
+      // reporting that nothing is animating.
+      if (token !== generation || destroyed) return;
     }
-    running = false;
+    if (token === generation) running = false;
   }
 
   return {

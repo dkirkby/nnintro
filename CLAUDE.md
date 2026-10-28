@@ -28,6 +28,13 @@ weights and biases, and the downstream pulse. `README.md` documents the export
 schema that joins the two halves and the deviations from `PLAN.md`; keep both
 current when that contract changes.
 
+The output space plots one input at a time with the other held at the probe,
+so the two curves cross at the prediction.
+
+The input space opens with no samples drawn and the probe at the centre of
+the domain: the panel is there to be probed first, and `Show samples` is an
+explicit opt-in.
+
 Stage 1 is mostly catalog growth: `CATALOG` in `src/nnintro/cli.py` has one
 entry and needs the other 75, and the UI needs the depth/width/activation
 controls that select among them.
@@ -89,11 +96,17 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   input sensitivity, point and mean-loss gradients. No DOM import belongs here.
 - `model/ripple.ts` decides what an edit actually changed; `view/ripple.ts`
   only animates that decision.
+- `model/surface.ts` evaluates the prediction surface over the input domain,
+  and the one-input slices through the probe that the output space draws.
+  `main.ts` recomputes the surface only when the parameters change; the
+  slices follow the probe and are recomputed every render.
 - `state.ts` owns the baseline/working split, selection, history, and the one
   versioned snapshot every view consumes.
 - `view/adapter.ts` is the **only** place model and renderer indices meet.
-- `view/network.ts`, `view/inputspace.ts`, `view/inspector.ts` render a
-  snapshot and own no mathematics.
+- `view/colormap.ts` is the **only** colour map. `main.ts` builds one scale
+  per render and hands the same object to both panels.
+- `view/network.ts`, `view/inputspace.ts`, `view/outputspace.ts`,
+  `view/inspector.ts` render a snapshot and own no mathematics.
 
 ### Two invariants that are easy to break
 
@@ -105,6 +118,19 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   ReLU kink crossing the visible domain), and the report is exported under
   `selection` so the choice can be audited. Only 2 of 24 attempts pass, so do
   not "simplify" this back to a single `train()` call.
+- **One colour means one number, everywhere.** The input space's surface, its
+  two axis colour bars, the samples and the network's nodes all read the
+  scale `main.ts` builds, so the output node is the colour of the surface
+  under the probe and an input node is the colour its axis bar shows at that
+  coordinate. The output space's vertical axis is that same scale, which is
+  why its background is the scale as a gradient and why its ticks are the
+  only numbers the scale has: changing that axis to fit the curve would
+  break the one thing the panel is for. The limit comes from the surface, the targets and the domain —
+  never from anything at the probe, or dragging the probe would recolour the
+  panel under it — and a hidden unit past the limit saturates rather than
+  flattening the surface to fit. Zero is the neutral surface colour: do not
+  reintroduce a brightness floor to make small values visible, because it
+  moves zero off neutral. Edge widths carry that floor instead.
 - **`state.ts` records an edit BEFORE it notifies subscribers.** The views
   build the ripple and the predicted-vs-actual comparison from `lastEdit()`
   inside the subscription; assigning after `commit()` hands them the previous

@@ -73,7 +73,7 @@ A checkpoint holds:
 ### Conventions that the schema pins down
 
 - **`W` is `[out][in]`** — destination-first, matching `torch.nn.Linear`.
-  nnet-svg indexes edge values source-first; `frontend/src/view/network.ts` is
+  nnet-svg indexes edge values source-first; `frontend/src/view/adapter.ts` is
   the single place that translates, and `frontend/tests/adapter.test.ts` pins
   it with an asymmetric matrix.
 - **Loss has no hidden factor of two.** Regression point loss is

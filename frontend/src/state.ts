@@ -126,7 +126,13 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
   let parameters = cloneParameters(baseline.parameters);
   let provenance: Provenance = baseline.provenance;
   let selection: ParameterRef | null = null;
-  let probe: Probe = { kind: "sample", index: 0 };
+  // The input space opens with no samples drawn, so the probe starts at the
+  // centre of the domain rather than on top of sample 0: the first thing to
+  // do with that panel is move this.
+  let probe: Probe = {
+    kind: "free",
+    x: dataset.domain.map(([lo, hi]) => (lo + hi) / 2),
+  };
   let version = 0;
   let edit: EditRecord | null = null;
 

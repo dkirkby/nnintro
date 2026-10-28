@@ -11,6 +11,7 @@ import type { DenseNetworkLayout, EdgeRef, NodeRef } from "nnet-svg";
 
 import type { Snapshot } from "../state.js";
 import { sameParameter, type ParameterRef } from "../model/types.js";
+import { createColorScale, niceLimit, type ColorScale } from "./colormap.js";
 import {
   edgeContribution,
   edgeKey,
@@ -30,11 +31,19 @@ import {
  */
 export type DisplayMode = "activations" | "weights" | "contributions";
 
+/**
+ * Colours come from the one shared map in `./colormap.ts`. Node fills in
+ * "activations" mode use the scale the input space passes in, so a node and
+ * the surface behind the probe are the same colour for the same number;
+ * weights and contributions are a different quantity and get their own
+ * limit on the same map.
+ */
+
 export const DISPLAY_MODES: { id: DisplayMode; label: string; legend: string }[] = [
   {
     id: "activations",
     label: "Activations",
-    legend: "Node fill: activation a. Edge width: |w|.",
+    legend: "Node fill: activation a, on the input space's colour scale. Edge width: |w|.",
   },
   {
     id: "weights",
@@ -57,7 +66,8 @@ export interface NetworkViewOptions {
 }
 
 export interface NetworkView {
-  render(snapshot: Snapshot, mode: DisplayMode): void;
+  /** `valueScale` is the shared activation scale, owned by the caller. */
+  render(snapshot: Snapshot, mode: DisplayMode, valueScale: ColorScale): void;
   /** Geometry for the ripple overlay, in SVG user units. */
   layout(): DenseNetworkLayout;
   overlay(): SVGGElement;
@@ -67,32 +77,22 @@ export interface NetworkView {
 
 const VIEW_BOX = { width: 680, height: 380 };
 
-/** Diverging ink for a signed quantity, as a CSS custom property lookup. */
-function signedColor(value: number, scale: number): string {
-  if (!Number.isFinite(value)) return "var(--nonfinite)";
-  const magnitude = Math.min(1, Math.abs(value) / (scale || 1));
-  const variable = value >= 0 ? "--pos" : "--neg";
-  return `color-mix(in oklab, var(${variable}) ${(20 + 80 * magnitude).toFixed(1)}%, var(--surface))`;
-}
-
-function maxAbs(values: number[]): number {
-  return values.reduce((best, v) => (Number.isFinite(v) ? Math.max(best, Math.abs(v)) : best), 0);
-}
-
 export function createNetworkView(options: NetworkViewOptions): NetworkView {
   const { container, layerSizes, onSelect, idPrefix } = options;
   const layout = layoutDenseNetwork({ layers: layerSizes, viewBox: VIEW_BOX });
   let root: SVGSVGElement | null = null;
   let overlayGroup: SVGGElement | null = null;
 
-  function render(snapshot: Snapshot, mode: DisplayMode): void {
+  function render(snapshot: Snapshot, mode: DisplayMode, valueScale: ColorScale): void {
     const { parameters, trace, selection } = snapshot;
     const allWeights = parameters.flatMap((layer) => layer.W.flat());
-    const weightScale = maxAbs(allWeights);
-    const activationScale = maxAbs(trace.act.flat());
-    const contributionScale = maxAbs(
-      parameters.flatMap((layer, l) =>
-        layer.W.flatMap((row, out) => row.map((w, i) => w * trace.act[l][i] * (out >= 0 ? 1 : 1))),
+    const allBiases = parameters.flatMap((layer) => layer.b);
+    // Biases share the weight limit: in "weights" mode the node fill and the
+    // edge colour are then the same quantity on the same scale.
+    const weightScale = createColorScale(niceLimit(allWeights, allBiases));
+    const contributionScale = createColorScale(
+      niceLimit(
+        parameters.flatMap((layer, l) => layer.W.flatMap((row) => row.map((w, i) => w * trace.act[l][i]))),
       ),
     );
 
@@ -114,9 +114,9 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       nodeAttrs: (node) => {
         const ref = nodeParameter(node);
         const selected = ref && selection && sameParameter(ref, selection);
-        const scale = mode === "weights" ? weightScale : activationScale;
+        const scale = mode === "weights" ? weightScale : valueScale;
         return {
-          fill: node.value === undefined ? "var(--surface)" : signedColor(node.value, scale),
+          fill: node.value === undefined ? "var(--surface)" : scale.css(node.value),
           class: selected ? "is-selected" : "",
           "data-key": nodeKey(node),
           tabindex: ref ? "0" : null,
@@ -130,10 +130,13 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
         const ref = edgeParameter(edge);
         const selected = selection && sameParameter(ref, selection);
         const scale = mode === "contributions" ? contributionScale : weightScale;
-        const magnitude = Math.min(1, Math.abs(edge.value ?? 0) / (scale || 1));
+        const magnitude = Math.min(1, Math.abs(edge.value ?? 0) / scale.limit);
         return {
-          stroke: signedColor(edge.value ?? 0, scale),
-          "stroke-width": (0.75 + 3.5 * magnitude).toFixed(2),
+          stroke: scale.css(edge.value ?? 0),
+          // The floor is in the width, not the colour: a weight near zero
+          // stays a visible hairline without being given a colour it has
+          // not earned.
+          "stroke-width": (1 + 3.25 * magnitude).toFixed(2),
           class: selected ? "is-selected" : "",
           "data-key": edgeKey(edge),
           tabindex: "0",
