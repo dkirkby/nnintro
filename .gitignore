@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Regenerable working output, at the repo root only. Anchored with a leading
+# slash so it does NOT swallow frontend/public/data, which is the tracked
+# snapshot the site is built from and the frontend tests read.
+/data/
+
+.DS_Store

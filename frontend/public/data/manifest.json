@@ -1,0 +1,22 @@
+{
+ "schemaVersion": "0.1.0",
+ "checkpoints": [
+  {
+   "checkpointId": "tilted-plane__2-4-1__relu",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "tilted-plane__2-4-1__relu.json",
+   "contentHash": "sha256:c82a4df64c8942c49fe486ab4d27100c7317687412a66a1fe23929fbb0609f4c",
+   "metrics": {
+    "trainLoss": 3.987179078934232e-15,
+    "testLoss": 4.1173094946159785e-15
+   }
+  }
+ ]
+}
