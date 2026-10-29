@@ -44,7 +44,9 @@ peer set — `Cannot read properties of null (reading 'edgesOut')` — and needs
 cleanly with plain `npm ci`.
 
 Note that the published npm package `zipline` is **not** this project's
-dependency: the one it uses is `@dkirkby/zipline`.
+dependency: the one it uses is `@dkirkby/zipline`. The pulse animation it
+drove is removed for now, so the dependency is currently unused and kept
+only against its return.
 
 No linter or formatter is configured, matching the sibling course projects.
 `data/` is gitignored working output; `frontend/public/data/` is the tracked

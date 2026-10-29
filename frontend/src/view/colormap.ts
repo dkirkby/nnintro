@@ -1,12 +1,22 @@
 /**
- * The one colour map, shared by every value the explorer paints.
+ * Three diverging colour maps, one per kind of quantity.
  *
- * Inputs, hidden activations, the output, the prediction surface behind the
- * input space and the two axis colour bars all read on this map, so a colour
- * means the same number wherever it appears: the output node's fill is the
- * same colour as the surface under the probe, and an input node's fill is the
- * colour the axis bar shows at that coordinate. Weights and contributions use
- * the same map with their own limit, because they are a different quantity.
+ * A single map across inputs, parameters and outputs made every panel look
+ * alike and invited comparisons between numbers that have nothing to do with
+ * each other, so the families are now visually distinct:
+ *
+ * - **input** (brown/teal) — the two input coordinates: the input nodes and
+ *   the colour bars along the two axes of the input-to-output map.
+ * - **param** (magenta/green) — weights and biases: every edge, and the
+ *   hidden nodes, which are filled by their bias while still showing their
+ *   activation as a number.
+ * - **output** (red/blue) — the prediction: the surface, the two slice
+ *   backgrounds, the samples and the output node.
+ *
+ * Within a family a colour still means one number, so the output node is the
+ * colour of the surface under the probe and an input node is the colour its
+ * axis bar shows at that coordinate. Across families it means nothing, which
+ * is the point.
  *
  * Zero is the neutral surface colour and the map is linear in the value, so
  * sign is readable and "nearly nothing" looks like nearly nothing.
@@ -27,20 +37,27 @@ interface Lab {
   b: number;
 }
 
+/** Which quantity a scale paints; see the module comment. */
+export type Family = "input" | "param" | "output";
+
 /** The light-theme tokens, used when the stylesheet is not reachable. */
-const FALLBACK: Record<Token, Lab> = {
-  "--pos": fromOklch(55, 0.16, 250),
-  "--neg": fromOklch(58, 0.17, 30),
+const FALLBACK: Record<string, Lab> = {
+  "--input-pos": fromOklch(55, 0.1, 195),
+  "--input-neg": fromOklch(50, 0.09, 70),
+  "--param-pos": fromOklch(55, 0.15, 145),
+  "--param-neg": fromOklch(55, 0.19, 345),
+  "--output-pos": fromOklch(55, 0.16, 250),
+  "--output-neg": fromOklch(58, 0.17, 30),
   "--surface": fromOklch(99, 0.004, 250),
   "--nonfinite": fromOklch(60, 0.2, 330),
 };
-
-type Token = "--pos" | "--neg" | "--surface" | "--nonfinite";
 
 /** Rounded limits, so probing does not make the colours shift underfoot. */
 const LADDER = [1, 1.5, 2, 3, 5, 7.5];
 
 export interface ColorScale {
+  /** Which family's two inks this scale mixes. */
+  readonly family: Family;
   /** `±limit` is full saturation; beyond it the colour clamps. */
   readonly limit: number;
   /** Theme-reactive colour for the DOM. */
@@ -78,25 +95,31 @@ export function niceLimit(...groups: Iterable<number>[]): number {
   return 10 * decade;
 }
 
-export function createColorScale(limit: number, root?: Element): ColorScale {
-  const tokens = resolveTokens(root);
+export function createColorScale(
+  limit: number,
+  family: Family,
+  root?: Element,
+): ColorScale {
+  const inks = [`--${family}-neg`, `--${family}-pos`] as const;
+  const tokens = resolveTokens([...inks, "--surface", "--nonfinite"], root);
   const span = Math.abs(limit) || 1;
   const fraction = (value: number) => Math.min(1, Math.abs(value) / span);
 
   function css(value: number): string {
     if (!Number.isFinite(value)) return "var(--nonfinite)";
-    const token = value >= 0 ? "--pos" : "--neg";
+    const token = inks[value >= 0 ? 1 : 0];
     const percent = (100 * fraction(value)).toFixed(1);
     return `color-mix(in oklab, var(${token}) ${percent}%, var(--surface))`;
   }
 
   function paint(value: number): string {
     if (!Number.isFinite(value)) return format(tokens["--nonfinite"]);
-    const ink = tokens[value >= 0 ? "--pos" : "--neg"];
+    const ink = tokens[inks[value >= 0 ? 1 : 0]];
     return format(mix(ink, tokens["--surface"], fraction(value)));
   }
 
   return {
+    family,
     limit: span,
     css,
     paint,
@@ -132,17 +155,20 @@ function fromOklch(lightness: number, chroma: number, hue: number): Lab {
   };
 }
 
-function resolveTokens(root?: Element): Record<Token, Lab> {
+function resolveTokens(
+  wanted: readonly string[],
+  root?: Element,
+): Record<string, Lab> {
+  const resolved = { ...FALLBACK };
   const element = root ?? globalThis.document?.documentElement;
-  if (!element) return FALLBACK;
+  if (!element) return resolved;
   let computed: CSSStyleDeclaration;
   try {
     computed = getComputedStyle(element);
   } catch {
-    return FALLBACK;
+    return resolved;
   }
-  const resolved = { ...FALLBACK };
-  for (const token of Object.keys(FALLBACK) as Token[]) {
+  for (const token of wanted) {
     const parsed = parseOklch(computed.getPropertyValue(token));
     if (parsed) resolved[token] = parsed;
   }
@@ -158,4 +184,25 @@ function parseOklch(text: string): Lab | null {
   const match = /^\s*oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*\)\s*$/.exec(text);
   if (!match) return null;
   return fromOklch(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+/** The three scales a render works with, built together in `main.ts`. */
+export interface Palette {
+  input: ColorScale;
+  param: ColorScale;
+  output: ColorScale;
+}
+
+/**
+ * A CSS gradient across part of a scale, for the axis bars and the legend
+ * strips. `direction` is a CSS gradient direction, and the stops run from
+ * `from` to `to` in that direction.
+ */
+export function gradientBar(
+  scale: ColorScale,
+  from: number,
+  to: number,
+  direction: string,
+): string {
+  return `linear-gradient(${direction}, ${scale.stops(from, to).join(", ")})`;
 }

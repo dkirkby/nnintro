@@ -1,11 +1,11 @@
 /**
- * The shared colour map: one scale for every value the explorer paints, with
- * zero at the neutral surface colour so sign is readable and a near-zero
- * value looks like one.
+ * The colour maps: one diverging scale per family of quantity, with zero at
+ * the neutral surface colour so sign is readable and a near-zero value looks
+ * like one.
  */
 import { describe, expect, it } from "vitest";
 
-import { createColorScale, niceLimit } from "../src/view/colormap.js";
+import { createColorScale, gradientBar, niceLimit } from "../src/view/colormap.js";
 
 describe("niceLimit", () => {
   it("rounds up to the next round number so colours do not shift underfoot", () => {
@@ -32,16 +32,16 @@ describe("niceLimit", () => {
 });
 
 describe("a colour scale", () => {
-  const scale = createColorScale(2);
+  const scale = createColorScale(2, "output");
 
   it("puts zero at the neutral surface colour", () => {
-    expect(scale.css(0)).toBe("color-mix(in oklab, var(--pos) 0.0%, var(--surface))");
+    expect(scale.css(0)).toBe("color-mix(in oklab, var(--output-pos) 0.0%, var(--surface))");
   });
 
   it("is linear in the value and separates the two signs", () => {
-    expect(scale.css(1)).toContain("var(--pos) 50.0%");
-    expect(scale.css(-1)).toContain("var(--neg) 50.0%");
-    expect(scale.css(2)).toContain("var(--pos) 100.0%");
+    expect(scale.css(1)).toContain("var(--output-pos) 50.0%");
+    expect(scale.css(-1)).toContain("var(--output-neg) 50.0%");
+    expect(scale.css(2)).toContain("var(--output-pos) 100.0%");
   });
 
   it("clamps rather than wrapping beyond the limit", () => {
@@ -65,7 +65,7 @@ describe("a colour scale", () => {
     // Same map, two renderings: the midpoint of the mix is the midpoint of
     // the range in both.
     expect(scale.css(0)).toContain("0.0%");
-    expect(scale.paint(0)).toBe(createColorScale(7).paint(0));
+    expect(scale.paint(0)).toBe(createColorScale(7, "output").paint(0));
   });
 
   it("spans only the range asked for in a gradient", () => {
@@ -74,5 +74,41 @@ describe("a colour scale", () => {
     expect(stops[0]).toBe(scale.css(-1));
     expect(stops[1]).toBe(scale.css(0));
     expect(stops[2]).toBe(scale.css(1));
+  });
+});
+
+describe("the three families", () => {
+  it("mix their own inks, so no two families share a colour", () => {
+    const value = 0.7;
+    const colours = (["input", "param", "output"] as const).map((family) =>
+      createColorScale(1, family).css(value),
+    );
+    expect(colours[0]).toContain("var(--input-pos)");
+    expect(colours[1]).toContain("var(--param-pos)");
+    expect(colours[2]).toContain("var(--output-pos)");
+    expect(new Set(colours).size).toBe(3);
+  });
+
+  it("paints distinct canvas colours for the same number", () => {
+    const painted = (["input", "param", "output"] as const).map((family) =>
+      createColorScale(1, family).paint(0.7),
+    );
+    expect(new Set(painted).size).toBe(3);
+  });
+
+  it("agrees with itself about zero whatever the family", () => {
+    // Zero is the surface colour in every family: the maps differ in their
+    // inks, not in where neutral sits.
+    const zeros = (["input", "param", "output"] as const).map((family) =>
+      createColorScale(1, family).paint(0),
+    );
+    expect(new Set(zeros).size).toBe(1);
+  });
+
+  it("builds a gradient across a range for the bars", () => {
+    const scale = createColorScale(1.5, "input");
+    expect(gradientBar(scale, -1, 1, "to right")).toBe(
+      `linear-gradient(to right, ${scale.stops(-1, 1).join(", ")})`,
+    );
   });
 });

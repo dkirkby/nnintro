@@ -6,12 +6,12 @@
  * DOM and nothing mathematical: it reads a snapshot and draws it.
  */
 
-import { createDenseNetworkSvg, layoutDenseNetwork } from "nnet-svg";
-import type { DenseNetworkLayout, EdgeRef, NodeRef } from "nnet-svg";
+import { createDenseNetworkSvg } from "nnet-svg";
+import type { EdgeRef, NodeRef } from "nnet-svg";
 
 import type { Snapshot } from "../state.js";
 import { sameParameter, type ParameterRef } from "../model/types.js";
-import { createColorScale, niceLimit, type ColorScale } from "./colormap.js";
+import { createColorScale, niceLimit, type Palette } from "./colormap.js";
 import {
   edgeContribution,
   edgeKey,
@@ -23,32 +23,19 @@ import {
 } from "./adapter.js";
 
 /**
- * What the colours and widths mean right now.
- *
- * These are separate modes rather than one overloaded scale: a single
- * colour ramp carrying activation, weight, contribution and sensitivity at
- * once cannot be read (PLAN.md section 4).
+ * What the edges show. Node fills do not vary with it: a node is always
+ * filled by what it owns -- an input by its value, a hidden unit by its
+ * bias, the output by the prediction -- each on its own family's map (see
+ * `./colormap.ts`). The number on a node is always its activation, so a
+ * hidden unit shows its bias as colour and its activation as text.
  */
-export type DisplayMode = "activations" | "weights" | "contributions";
-
-/**
- * Colours come from the one shared map in `./colormap.ts`. Node fills in
- * "activations" mode use the scale the input space passes in, so a node and
- * the surface behind the probe are the same colour for the same number;
- * weights and contributions are a different quantity and get their own
- * limit on the same map.
- */
+export type DisplayMode = "weights" | "contributions";
 
 export const DISPLAY_MODES: { id: DisplayMode; label: string; legend: string }[] = [
   {
-    id: "activations",
-    label: "Activations",
-    legend: "Node fill: activation a, on the input space's colour scale. Edge width: |w|.",
-  },
-  {
     id: "weights",
     label: "Weights",
-    legend: "Edge colour and width: weight w. Node fill: bias b.",
+    legend: "Edge colour and width: weight w.",
   },
   {
     id: "contributions",
@@ -56,6 +43,11 @@ export const DISPLAY_MODES: { id: DisplayMode; label: string; legend: string }[]
     legend: "Edge colour and width: the contribution w·a for this input.",
   },
 ];
+
+/** The half of the legend that does not change with the mode. */
+export const NODE_LEGEND =
+  "Node fill: an input's value, a hidden unit's bias, or ŷ — a different " +
+  "colour map each. Node text is always the activation.";
 
 export interface NetworkViewOptions {
   container: HTMLElement;
@@ -66,11 +58,8 @@ export interface NetworkViewOptions {
 }
 
 export interface NetworkView {
-  /** `valueScale` is the shared activation scale, owned by the caller. */
-  render(snapshot: Snapshot, mode: DisplayMode, valueScale: ColorScale): void;
-  /** Geometry for the ripple overlay, in SVG user units. */
-  layout(): DenseNetworkLayout;
-  overlay(): SVGGElement;
+  /** The three scales are built once per render by the caller. */
+  render(snapshot: Snapshot, mode: DisplayMode, palette: Palette): void;
   svg(): SVGSVGElement;
   destroy(): void;
 }
@@ -79,22 +68,32 @@ const VIEW_BOX = { width: 680, height: 380 };
 
 export function createNetworkView(options: NetworkViewOptions): NetworkView {
   const { container, layerSizes, onSelect, idPrefix } = options;
-  const layout = layoutDenseNetwork({ layers: layerSizes, viewBox: VIEW_BOX });
   let root: SVGSVGElement | null = null;
-  let overlayGroup: SVGGElement | null = null;
 
-  function render(snapshot: Snapshot, mode: DisplayMode, valueScale: ColorScale): void {
+  const lastLayer = layerSizes.length - 1;
+
+  function render(snapshot: Snapshot, mode: DisplayMode, palette: Palette): void {
     const { parameters, trace, selection } = snapshot;
-    const allWeights = parameters.flatMap((layer) => layer.W.flat());
-    const allBiases = parameters.flatMap((layer) => layer.b);
-    // Biases share the weight limit: in "weights" mode the node fill and the
-    // edge colour are then the same quantity on the same scale.
-    const weightScale = createColorScale(niceLimit(allWeights, allBiases));
+    // Contributions are still a parameter-family quantity -- an edge is an
+    // edge -- but they need their own limit, since w·a is not w.
     const contributionScale = createColorScale(
       niceLimit(
         parameters.flatMap((layer, l) => layer.W.flatMap((row) => row.map((w, i) => w * trace.act[l][i]))),
       ),
+      "param",
     );
+
+    /** What a node owns, which is not what it displays. */
+    function nodeFill(node: NodeRef): string {
+      if (node.layerIndex === 0) {
+        return palette.input.css(trace.act[0][node.nodeIndex]);
+      }
+      if (node.layerIndex === lastLayer) {
+        return palette.output.css(trace.act[lastLayer][node.nodeIndex]);
+      }
+      const bias = nodeBias(parameters, node);
+      return bias === null ? "var(--surface)" : palette.param.css(bias);
+    }
 
     const svg = createDenseNetworkSvg({
       layers: layerSizes,
@@ -105,8 +104,8 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       desc:
         `A ${layerSizes.join("-")} network. Select an edge to edit its weight, ` +
         "or a node to edit its bias.",
-      nodeValue: (node: NodeRef) =>
-        mode === "weights" ? nodeBias(parameters, node) : trace.act[node.layerIndex]?.[node.nodeIndex],
+      // Always the activation: the bias is the colour, not the number.
+      nodeValue: (node: NodeRef) => trace.act[node.layerIndex]?.[node.nodeIndex],
       edgeValue: (edge: EdgeRef) =>
         mode === "contributions"
           ? edgeContribution(parameters, trace.act, edge)
@@ -114,22 +113,22 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       nodeAttrs: (node) => {
         const ref = nodeParameter(node);
         const selected = ref && selection && sameParameter(ref, selection);
-        const scale = mode === "weights" ? weightScale : valueScale;
         return {
-          fill: node.value === undefined ? "var(--surface)" : scale.css(node.value),
+          fill: nodeFill(node),
           class: selected ? "is-selected" : "",
           "data-key": nodeKey(node),
           tabindex: ref ? "0" : null,
           role: ref ? "button" : null,
           "aria-label": ref
-            ? `bias of layer ${node.layerIndex} unit ${node.nodeIndex}, ${format(node.value)}`
+            ? `layer ${node.layerIndex} unit ${node.nodeIndex}, activation ` +
+              `${format(node.value)}, bias ${format(nodeBias(parameters, node))}`
             : `input ${node.nodeIndex}, ${format(node.value)}`,
         };
       },
       edgeAttrs: (edge) => {
         const ref = edgeParameter(edge);
         const selected = selection && sameParameter(ref, selection);
-        const scale = mode === "contributions" ? contributionScale : weightScale;
+        const scale = mode === "contributions" ? contributionScale : palette.param;
         const magnitude = Math.min(1, Math.abs(edge.value ?? 0) / scale.limit);
         return {
           stroke: scale.css(edge.value ?? 0),
@@ -155,16 +154,11 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       nodeTitle: (node) =>
         node.layerIndex === 0
           ? `input ${format(node.value)}`
-          : `${mode === "weights" ? "bias" : "activation"} ${format(node.value)}`,
+          : `activation ${format(node.value)}, bias ${format(nodeBias(parameters, node))}`,
     });
 
     svg.addEventListener("click", handleActivate);
     svg.addEventListener("keydown", handleKey);
-
-    overlayGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    overlayGroup.setAttribute("class", "ripple-overlay");
-    overlayGroup.setAttribute("aria-hidden", "true");
-    svg.append(overlayGroup);
 
     container.replaceChildren(svg);
     root = svg;
@@ -201,11 +195,6 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
 
   return {
     render,
-    layout: () => layout,
-    overlay: () => {
-      if (!overlayGroup) throw new Error("render() before using the overlay");
-      return overlayGroup;
-    },
     svg: () => {
       if (!root) throw new Error("render() before using the svg");
       return root;
@@ -215,7 +204,6 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       root?.removeEventListener("keydown", handleKey);
       container.replaceChildren();
       root = null;
-      overlayGroup = null;
     },
   };
 }

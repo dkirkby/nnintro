@@ -12,6 +12,7 @@
  */
 
 import { fetchCheckpoint, fetchManifest } from "./model/catalog.js";
+import { parameterCurves } from "./model/curves.js";
 import { hiddenActivation } from "./model/evaluate.js";
 import { computeRipple, originOf, type Ripple } from "./model/ripple.js";
 import { outputSlice, outputSurface, type Surface } from "./model/surface.js";
@@ -23,17 +24,17 @@ import {
   type Explorer,
   type Snapshot,
 } from "./state.js";
-import { createColorScale, niceLimit, type ColorScale } from "./view/colormap.js";
-import { createInputSpaceView } from "./view/inputspace.js";
+import { createColorScale, niceLimit, type Palette } from "./view/colormap.js";
+import { createInputOutputView } from "./view/inputoutput.js";
 import { createInspector } from "./view/inspector.js";
-import { createOutputSpaceView } from "./view/outputspace.js";
 import {
   createNetworkView,
   format,
   DISPLAY_MODES,
+  NODE_LEGEND,
   type DisplayMode,
 } from "./view/network.js";
-import { createRippleAnimator } from "./view/ripple.js";
+import { createParamSpaceView } from "./view/paramspace.js";
 
 async function start(): Promise<void> {
   const found = document.querySelector<HTMLElement>("#app");
@@ -58,20 +59,22 @@ async function start(): Promise<void> {
     </header>
     <div class="controls" id="controls"></div>
     <div class="workspace">
-      <section class="panel">
-        <h2>Input space</h2>
-        <div id="input-space"></div>
+      <section class="panel io-panel">
+        <h2>Input → output</h2>
+        <div id="input-output"></div>
         <p class="legend" id="input-legend"></p>
       </section>
-      <section class="panel network-panel">
-        <h2>Network</h2>
-        <div id="network"></div>
-        <p class="legend" id="legend"></p>
-      </section>
-      <section class="panel output-panel">
-        <h2>Output space</h2>
-        <div id="output-space"></div>
-      </section>
+      <div class="stack">
+        <section class="panel network-panel">
+          <h2>Network</h2>
+          <div id="network"></div>
+          <p class="legend" id="legend"></p>
+        </section>
+        <section class="panel">
+          <h2>Parameters → output</h2>
+          <div id="param-space"></div>
+        </section>
+      </div>
       <div class="inspector" id="inspector"></div>
     </div>
     <p class="status" id="status" role="status" aria-live="polite"></p>
@@ -83,14 +86,10 @@ async function start(): Promise<void> {
     idPrefix: `nn-${checkpoint.checkpointId}`,
     onSelect: (ref) => explorer.selectParameter(ref),
   });
-  const inputSpace = createInputSpaceView({
-    container: app.querySelector("#input-space")!,
+  const inputOutput = createInputOutputView({
+    container: app.querySelector("#input-output")!,
     dataset,
     onProbe: (probe) => explorer.setProbe(probe),
-  });
-  const outputSpace = createOutputSpaceView({
-    container: app.querySelector("#output-space")!,
-    dataset,
   });
   const inspector = createInspector({
     container: app.querySelector("#inspector")!,
@@ -100,12 +99,12 @@ async function start(): Promise<void> {
     onEdit: (ref, value) => explorer.setParameter(ref, value),
     onRestore: (ref) => explorer.restoreParameter(ref),
   });
-  const animator = createRippleAnimator({
-    overlay: () => networkView.overlay(),
-    layout: () => networkView.layout(),
+  const paramSpace = createParamSpaceView({
+    container: app.querySelector("#param-space")!,
+    onEdit: (ref, value) => explorer.setParameter(ref, value),
   });
 
-  let mode: DisplayMode = "activations";
+  let mode: DisplayMode = "weights";
   // Off to begin with: the panel is there to be probed, and four hundred
   // dots answer the question before the student has asked it.
   let showSamples = false;
@@ -132,68 +131,84 @@ async function start(): Promise<void> {
   }
 
   /**
-   * One scale for everything drawn as a colour: the surface, the axis bars,
-   * the samples and the network's nodes.
+   * The three scales, one per family of quantity (see `view/colormap.ts`).
    *
-   * It covers what the input space itself draws: the whole prediction
-   * surface, the targets (which count even while the samples are hidden, so
-   * showing them never recolours the panel) and the input domain the axis
-   * bars span. All three depend on the parameters alone, so dragging the
-   * probe never recolours the panel underneath it.
+   * Each limit is a function of the parameters and the dataset alone, never
+   * of where the probe is, so dragging the probe cannot recolour anything
+   * underneath it:
    *
-   * A hidden unit can run past that limit, and then its node saturates
-   * rather than widening the scale: stretching the whole surface to fit one
-   * large activation would flatten the thing the panel is for. The node
-   * keeps its number, and the legend states the limit.
+   * - **input**: the domain the two axis bars span.
+   * - **param**: every weight and bias, so an edge and a hidden node's fill
+   *   are the same quantity on the same scale.
+   * - **output**: the whole prediction surface and the targets, which count
+   *   even while the samples are hidden, so showing them recolours nothing.
    */
-  function scaleFor(surface: Surface): ColorScale {
-    return createColorScale(
-      niceLimit([surface.extent], dataset.samples.y, dataset.domain.flat()),
-    );
+  function paletteFor(snapshot: Snapshot, surface: Surface): Palette {
+    const weights = snapshot.parameters.flatMap((layer) => layer.W.flat());
+    const biases = snapshot.parameters.flatMap((layer) => layer.b);
+    return {
+      input: createColorScale(niceLimit(dataset.domain.flat()), "input"),
+      param: createColorScale(niceLimit(weights, biases), "param"),
+      output: createColorScale(
+        niceLimit([surface.extent], dataset.samples.y),
+        "output",
+      ),
+    };
   }
 
   function render(snapshot: Snapshot): void {
     const surface = surfaceFor(snapshot.parameters);
-    const scale = scaleFor(surface);
-
-    networkView.render(snapshot, mode, scale);
-    inputSpace.render(snapshot, { surface, scale, showSamples });
+    const palette = paletteFor(snapshot, surface);
     // The slices follow the probe, so unlike the surface they are recomputed
     // on every render.
-    outputSpace.render(snapshot, {
-      scale,
-      slices: dataset.domain.map((_, axis) =>
-        outputSlice(snapshot.parameters, activation, dataset.domain, snapshot.x, axis),
-      ),
+    const slices = dataset.domain.map((_, axis) =>
+      outputSlice(snapshot.parameters, activation, dataset.domain, snapshot.x, axis),
+    );
+
+    // One sweep per parameter, across the scale the x axis of that panel
+    // shows, at wherever the probe is now.
+    const curves = parameterCurves(
+      snapshot.parameters,
+      activation,
+      snapshot.x,
+      palette.param.limit,
+    );
+
+    networkView.render(snapshot, mode, palette);
+    inputOutput.render(snapshot, { surface, slices, palette, showSamples });
+    paramSpace.render(snapshot, {
+      curves,
+      scale: palette.param,
+      // Tall enough for every curve, so no sweep is cut off at an edge the
+      // reader cannot see.
+      outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
     });
     inspector.render(snapshot, explorer.lastEdit(), ripple);
     controls.sync(mode, showSamples);
     app.querySelector("#provenance")!.textContent = describeProvenance(snapshot.provenance);
+
     app.querySelector("#legend")!.textContent =
-      DISPLAY_MODES.find((entry) => entry.id === mode)!.legend;
+      `${DISPLAY_MODES.find((entry) => entry.id === mode)!.legend} ${NODE_LEGEND}`;
     app.querySelector("#input-legend")!.textContent =
-      `Drag to move the probe. Colour is ${dataset.targetName} on a shared ` +
-      `±${scale.limit} scale, read by the surface, the two axis bars and the ` +
-      `network's nodes, which saturate beyond it; the arrow is the local ` +
-      `∂ŷ/∂x direction.` +
+      `Drag anywhere in the map to move the probe. The slices hold the other ` +
+      `input where it is: left, ${dataset.inputNames[1]} varies at ` +
+      `${dataset.inputNames[0]} = ${format(snapshot.x[0])}; below, ` +
+      `${dataset.inputNames[0]} varies at ${dataset.inputNames[1]} = ` +
+      `${format(snapshot.x[1])}. Slice height and background are the same ` +
+      `±${palette.output.limit} output scale; the two bars are the input ` +
+      `scale, which the input nodes also use.` +
       (showSamples ? " Dashed marks are held-out samples." : "");
   }
 
   explorer.subscribe((snapshot) => {
     const edit = explorer.lastEdit();
-    // A new change makes any run in flight obsolete before anything is
-    // drawn, so a stale pulse can never outlive the state that caused it.
-    animator.cancel();
     ripple = edit ? rippleFor(edit, snapshot) : null;
     render(snapshot);
-    if (ripple) {
-      const description = describeParameter(edit!.ref);
+    if (edit) {
       setStatus(
         app,
-        `${description}: ${format(edit!.before)} → ${format(edit!.after)}.` +
-          (animator.reducedMotion ? " Showing static deltas." : ""),
+        `${describeParameter(edit.ref)}: ${format(edit.before)} → ${format(edit.after)}.`,
       );
-      void animator.play(ripple);
     }
   });
 
@@ -204,7 +219,7 @@ async function start(): Promise<void> {
     .addEventListener("change", () => render(explorer.snapshot()));
 
   render(explorer.snapshot());
-  setStatus(app, "Probe the input space, then select an edge or a node.");
+  setStatus(app, "Drag in the map to probe, then select an edge or a node.");
 }
 
 function rippleFor(edit: EditRecord, snapshot: Snapshot): Ripple {

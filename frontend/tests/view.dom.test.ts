@@ -2,31 +2,40 @@
  * @vitest-environment jsdom
  *
  * The view half of the Stage 0 exit condition: an edit preserves the
- * selection in the rendered SVG, and a new edit cancels a stale animation
- * instead of letting it finish over the new state.
+ * selection in the rendered SVG, the three colour families stay apart, and
+ * the three plots of the input-to-output panel share their axes exactly.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { forward } from "../src/model/evaluate.js";
-import { computeRipple, originOf } from "../src/model/ripple.js";
+import { parameterCurves } from "../src/model/curves.js";
 import { outputSlice, outputSurface } from "../src/model/surface.js";
 import { createExplorer, type Explorer } from "../src/state.js";
 import type { ParameterRef } from "../src/model/types.js";
 import { edgeParameter } from "../src/view/adapter.js";
-import { createColorScale, niceLimit } from "../src/view/colormap.js";
-import { createInputSpaceView, type InputSpaceView } from "../src/view/inputspace.js";
-import { createNetworkView, type NetworkView } from "../src/view/network.js";
-import { createOutputSpaceView, type OutputSpaceView } from "../src/view/outputspace.js";
-import { createRippleAnimator } from "../src/view/ripple.js";
+import { createColorScale, niceLimit, type Palette } from "../src/view/colormap.js";
+import { createInputOutputView, type InputOutputView } from "../src/view/inputoutput.js";
+import { createNetworkView, format, type NetworkView } from "../src/view/network.js";
+import { createParamSpaceView, type ParamSpaceView } from "../src/view/paramspace.js";
 import { loadCheckpoint, loadManifest } from "./fixtures.js";
 
 const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
 const WEIGHT: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 const SURFACE = outputSurface(CHECKPOINT.parameters, ACTIVATION, CHECKPOINT.dataset.domain, 12);
-const SCALE = createColorScale(
-  niceLimit([SURFACE.extent], CHECKPOINT.dataset.samples.y, CHECKPOINT.dataset.domain.flat()),
-);
+const PALETTE: Palette = {
+  input: createColorScale(niceLimit(CHECKPOINT.dataset.domain.flat()), "input"),
+  param: createColorScale(
+    niceLimit(
+      CHECKPOINT.parameters.flatMap((layer) => layer.W.flat()),
+      CHECKPOINT.parameters.flatMap((layer) => layer.b),
+    ),
+    "param",
+  ),
+  output: createColorScale(
+    niceLimit([SURFACE.extent], CHECKPOINT.dataset.samples.y),
+    "output",
+  ),
+};
 
 describe("the network view", () => {
   let container: HTMLElement;
@@ -48,7 +57,7 @@ describe("the network view", () => {
         explorer.selectParameter(ref);
       },
     });
-    view.render(explorer.snapshot(), "activations", SCALE);
+    view.render(explorer.snapshot(), "weights", PALETTE);
   });
 
   it("renders one edge per weight and one node per unit", () => {
@@ -89,13 +98,13 @@ describe("the network view", () => {
 
   it("KEEPS THE SELECTION VISIBLE after an edit re-renders the view", () => {
     explorer.selectParameter(WEIGHT);
-    view.render(explorer.snapshot(), "activations", SCALE);
+    view.render(explorer.snapshot(), "weights", PALETTE);
     expect(container.querySelector('[data-key="e:0:0:1"]')!.classList).toContain(
       "is-selected",
     );
 
     explorer.setParameter(WEIGHT, 0.5);
-    view.render(explorer.snapshot(), "activations", SCALE);
+    view.render(explorer.snapshot(), "weights", PALETTE);
     const stillSelected = container.querySelector('[data-key="e:0:0:1"]');
     expect(stillSelected!.classList).toContain("is-selected");
     expect(container.querySelectorAll(".is-selected")).toHaveLength(1);
@@ -103,7 +112,7 @@ describe("the network view", () => {
 
   it("shows the edited value, not the checkpoint's", () => {
     explorer.setParameter(WEIGHT, -2.5);
-    view.render(explorer.snapshot(), "weights", SCALE);
+    view.render(explorer.snapshot(), "weights", PALETTE);
     const label = container
       .querySelector('[data-key="e:0:0:1"]')!
       .getAttribute("aria-label");
@@ -111,158 +120,34 @@ describe("the network view", () => {
   });
 });
 
-describe("the ripple animator", () => {
-  let container: HTMLElement;
-  let view: NetworkView;
-
-  function makeRipple(ref: ParameterRef, value: number) {
-    const explorer = createExplorer(CHECKPOINT);
-    // Off the origin, where the explorer now opens: an input of exactly zero
-    // carries no change out of a first-layer weight, so nothing would
-    // animate and the test would pass vacuously.
-    explorer.setProbe({ kind: "free", x: [0.73, -0.41] });
-    const before = explorer.snapshot().trace;
-    explorer.setParameter(ref, value);
-    const after = explorer.snapshot().trace;
-    return computeRipple(before, after, { ...originOf(ref), kind: "parameter" });
-  }
-
-  beforeEach(() => {
-    container = document.createElement("div");
-    document.body.replaceChildren(container);
-    view = createNetworkView({
-      container,
-      layerSizes: CHECKPOINT.architecture.layerSizes,
-      idPrefix: "ripple-test",
-      onSelect: () => {},
-    });
-    view.render(createExplorer(CHECKPOINT).snapshot(), "activations", SCALE);
-  });
-
-  it("marks changed and blocked nodes without any motion when asked", async () => {
-    const animator = createRippleAnimator({
-      overlay: () => view.overlay(),
-      layout: () => view.layout(),
-      prefersReducedMotion: () => true,
-    });
-    await animator.play(makeRipple(WEIGHT, 2));
-    expect(animator.reducedMotion).toBe(true);
-    // Static deltas instead of a pulse, and no zipline group was created.
-    expect(view.overlay().querySelectorAll("circle").length).toBeGreaterThan(0);
-    expect(view.overlay().querySelectorAll("g").length).toBe(0);
-  });
-
-  it("CANCELS A STALE RUN when a new edit arrives", async () => {
-    const animator = createRippleAnimator({
-      overlay: () => view.overlay(),
-      layout: () => view.layout(),
-      prefersReducedMotion: () => false,
-    });
-    const first = animator.play(makeRipple(WEIGHT, 2));
-    const generationDuringFirst = animator.generation;
-    // Guard against a vacuous pass: the first run really did start, and
-    // really did mount a zipline group to animate.
-    expect(animator.running).toBe(true);
-    expect(view.overlay().querySelectorAll("g").length).toBeGreaterThan(0);
-
-    // A second edit lands before the first run can finish.
-    const second = animator.play(makeRipple(WEIGHT, -2));
-    expect(animator.generation).toBeGreaterThan(generationDuringFirst);
-
-    // The stale run resolves rather than hanging or continuing.
-    await expect(first).resolves.toBeUndefined();
-    animator.cancel();
-    await expect(second).resolves.toBeUndefined();
-    expect(animator.running).toBe(false);
-  });
-
-  it("lets overlapping runs finish without destroying each other's groups", async () => {
-    // Each run owns the controller it mounted. Sharing one slot let a stale
-    // run tear down the group of the run that had replaced it, which then
-    // threw on its own cleanup.
-    const animator = createRippleAnimator({
-      overlay: () => view.overlay(),
-      layout: () => view.layout(),
-      prefersReducedMotion: () => false,
-    });
-    const runs = [
-      animator.play(makeRipple(WEIGHT, 2)),
-      animator.play(makeRipple(WEIGHT, -2)),
-      animator.play(makeRipple(WEIGHT, 1.5)),
-    ];
-    animator.cancel();
-    await expect(Promise.all(runs)).resolves.toEqual([undefined, undefined, undefined]);
-    expect(animator.running).toBe(false);
-    expect(view.overlay().querySelectorAll("g")).toHaveLength(0);
-  });
-
-  it("cancel() stops a run and leaves nothing animating", async () => {
-    const animator = createRippleAnimator({
-      overlay: () => view.overlay(),
-      layout: () => view.layout(),
-      prefersReducedMotion: () => false,
-    });
-    const run = animator.play(makeRipple(WEIGHT, 3));
-    animator.cancel();
-    await expect(run).resolves.toBeUndefined();
-    expect(animator.running).toBe(false);
-  });
-
-  it("destroy() clears the overlay and refuses further runs", async () => {
-    const animator = createRippleAnimator({
-      overlay: () => view.overlay(),
-      layout: () => view.layout(),
-      prefersReducedMotion: () => true,
-    });
-    await animator.play(makeRipple(WEIGHT, 2));
-    animator.destroy();
-    expect(view.overlay().childElementCount).toBe(0);
-    await animator.play(makeRipple(WEIGHT, 1));
-    expect(view.overlay().childElementCount).toBe(0);
-  });
-
-  it("animates only the edges that actually carried a change", async () => {
-    // A bias edit on a unit that is off at this probe changes nothing
-    // downstream, so there is nothing to animate even though the output is
-    // structurally reachable.
-    const explorer = createExplorer(CHECKPOINT);
-    const probe = CHECKPOINT.goldenProbes.find((p) => p.id === "most-inactive")!;
-    explorer.setProbe({ kind: "free", x: probe.x });
-    const before = explorer.snapshot().trace;
-    const offUnit = before.act[1].findIndex((a) => a === 0);
-    expect(offUnit).toBeGreaterThanOrEqual(0);
-
-    const ref: ParameterRef = { kind: "bias", layer: 0, out: offUnit };
-    const current = explorer.snapshot().parameters[0].b[offUnit];
-    // Still negative after the nudge: the unit stays off.
-    explorer.setParameter(ref, current - 0.1);
-    const ripple = computeRipple(before, explorer.snapshot().trace, {
-      ...originOf(ref),
-      kind: "parameter",
-    });
-    expect(ripple.hasBlocked).toBe(true);
-    expect(ripple.stages.flatMap((s) => s.edges).every((e) => !e.carried)).toBe(true);
-  });
-
-  it("the output really did change for an edit that is not blocked", () => {
-    const explorer = createExplorer(CHECKPOINT);
-    const before = forward(explorer.snapshot().parameters, "relu", explorer.snapshot().x);
-    explorer.setParameter({ kind: "bias", layer: 1, out: 0 }, 5);
-    const after = explorer.snapshot().trace;
-    expect(after.output).not.toBeCloseTo(before.output, 6);
-  });
-});
-
-describe("the input space", () => {
+describe("the input \u2192 output panel", () => {
+  const PROBE = [0.649, -0.64];
   let container: HTMLElement;
   let explorer: Explorer;
-  let view: InputSpaceView;
+  let view: InputOutputView;
+
+  function frame(showSamples = false) {
+    const snapshot = explorer.snapshot();
+    return {
+      surface: SURFACE,
+      slices: CHECKPOINT.dataset.domain.map((_, axis) =>
+        outputSlice(snapshot.parameters, ACTIVATION, CHECKPOINT.dataset.domain, snapshot.x, axis),
+      ),
+      palette: PALETTE,
+      showSamples,
+    };
+  }
+
+  /** The map is 300 units square; x1 runs right and x2 runs up. */
+  const toPixelX = (x: number) => ((x - CHECKPOINT.dataset.domain[0][0]) / 2) * 300;
+  const toPixelY = (y: number) => 300 - ((y - CHECKPOINT.dataset.domain[1][0]) / 2) * 300;
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.replaceChildren(container);
     explorer = createExplorer(CHECKPOINT);
-    view = createInputSpaceView({
+    explorer.setProbe({ kind: "free", x: PROBE });
+    view = createInputOutputView({
       container,
       dataset: CHECKPOINT.dataset,
       onProbe: (probe) => explorer.setProbe(probe),
@@ -270,85 +155,175 @@ describe("the input space", () => {
   });
 
   it("SHOWS NO SAMPLES until they are asked for", () => {
-    view.render(explorer.snapshot(), { surface: SURFACE, scale: SCALE, showSamples: false });
+    view.render(explorer.snapshot(), frame());
     expect(container.querySelectorAll(".sample")).toHaveLength(0);
-    // The probe and its sensitivity arrow are still there to be dragged.
-    expect(container.querySelectorAll(".probe")).toHaveLength(1);
-
-    view.render(explorer.snapshot(), { surface: SURFACE, scale: SCALE, showSamples: true });
+    view.render(explorer.snapshot(), frame(true));
     expect(container.querySelectorAll(".sample")).toHaveLength(
       CHECKPOINT.dataset.samples.y.length,
     );
   });
 
-  it("colours the samples with the shared scale, held-out ones included", () => {
-    view.render(explorer.snapshot(), { surface: SURFACE, scale: SCALE, showSamples: true });
-    const marks = Array.from(container.querySelectorAll<SVGElement>(".sample"));
-    const first = CHECKPOINT.dataset.samples.y[0];
-    expect(marks[0].getAttribute("fill")).toBe(SCALE.css(first));
-    // A held-out point keeps its fill: it is dashed, not hollow, so the
-    // "does this dot vanish into the surface" reading still works.
-    const test = marks.find((mark) => mark.classList.contains("is-test"));
-    expect(test!.getAttribute("fill")).toMatch(/^color-mix/);
+  it("marks the probe with crosshairs and nothing else", () => {
+    view.render(explorer.snapshot(), frame());
+    // Two in the map, one through each slice; no probe dot, no arrow.
+    expect(container.querySelectorAll(".io-marks .crosshair")).toHaveLength(2);
+    expect(container.querySelectorAll(".io-slice-x1 .crosshair")).toHaveLength(1);
+    expect(container.querySelectorAll(".io-slice-x2 .crosshair")).toHaveLength(1);
+    expect(container.querySelector(".probe")).toBeNull();
+    expect(container.querySelector(".sensitivity-arrow")).toBeNull();
   });
 
-  it("draws a colour bar along each input axis, over the domain", () => {
-    view.render(explorer.snapshot(), { surface: SURFACE, scale: SCALE, showSamples: false });
-    const [[x1lo, x1hi]] = CHECKPOINT.dataset.domain;
+  it("LINES THE SLICES UP WITH THE MAP's OWN AXES", () => {
+    view.render(explorer.snapshot(), frame());
+    const inMap = Array.from(container.querySelectorAll(".io-marks .crosshair"));
+    const horizontal = inMap.find((node) => node.getAttribute("y1") === node.getAttribute("y2"))!;
+    const vertical = inMap.find((node) => node.getAttribute("x1") === node.getAttribute("x2"))!;
+    expect(Number(vertical.getAttribute("x1"))).toBeCloseTo(toPixelX(PROBE[0]), 2);
+    expect(Number(horizontal.getAttribute("y1"))).toBeCloseTo(toPixelY(PROBE[1]), 2);
+
+    // The slice below shares the map's x1 pixel, and the one to its left
+    // shares the map's x2 pixel: that is what makes them read as one figure.
+    const below = container.querySelector(".io-slice-x1 .crosshair")!;
+    expect(below.getAttribute("x1")).toBe(vertical.getAttribute("x1"));
+    const left = container.querySelector(".io-slice-x2 .crosshair")!;
+    expect(left.getAttribute("y1")).toBe(horizontal.getAttribute("y1"));
+  });
+
+  it("puts each slice's curve on the crosshair at the prediction", () => {
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, frame());
+    // The slices are 75 units deep, +limit at the top of the one below and
+    // at the LEFT of the rotated one.
+    const expected = 75 / 2 - (snapshot.trace.output / PALETTE.output.limit) * (75 / 2);
+    const below = container.querySelector(".io-slice-x1 .slice-point")!;
+    expect(Number(below.getAttribute("cy"))).toBeCloseTo(expected, 2);
+    expect(Number(below.getAttribute("cx"))).toBeCloseTo(toPixelX(PROBE[0]), 2);
+    const left = container.querySelector(".io-slice-x2 .slice-point")!;
+    expect(Number(left.getAttribute("cx"))).toBeCloseTo(expected, 2);
+    expect(Number(left.getAttribute("cy"))).toBeCloseTo(toPixelY(PROBE[1]), 2);
+  });
+
+  it("runs the rotated slice's output axis leftward, away from the map", () => {
+    view.render(explorer.snapshot(), frame());
+    const left = container.querySelector<HTMLElement>(".io-slice-x2 .slice-gradient")!;
+    expect(left.style.backgroundImage).toContain("linear-gradient(to left");
+    const below = container.querySelector<HTMLElement>(".io-slice-x1 .slice-gradient")!;
+    expect(below.style.backgroundImage).toContain("linear-gradient(to top");
+    for (const gradient of [left, below]) {
+      expect(gradient.style.backgroundImage).toContain(
+        PALETTE.output.css(PALETTE.output.limit),
+      );
+    }
+  });
+
+  it("KEEPS THE TWO FAMILIES APART: axis bars read inputs, slices read outputs", () => {
+    view.render(explorer.snapshot(), frame(true));
     const bar = container.querySelector<HTMLElement>(".axis-bar-x")!;
-    expect(bar.style.backgroundImage).toContain("linear-gradient(to right");
-    expect(bar.style.backgroundImage).toContain(SCALE.css(x1lo));
-    expect(bar.style.backgroundImage).toContain(SCALE.css(x1hi));
-    expect(bar.querySelector(".axis-bar-label")!.textContent).toBe(
-      CHECKPOINT.dataset.inputNames[0],
+    expect(bar.style.backgroundImage).toContain("var(--input-");
+    expect(bar.style.backgroundImage).not.toContain("var(--output-");
+    expect(bar.style.backgroundImage).toContain(
+      PALETTE.input.css(CHECKPOINT.dataset.domain[0][0]),
     );
 
-    // The second axis runs upwards, so its gradient must not be the first's.
-    const other = container.querySelector<HTMLElement>(".axis-bar-y")!;
-    expect(other.style.backgroundImage).toContain("linear-gradient(to top");
+    const gradient = container.querySelector<HTMLElement>(".io-slice-x1 .slice-gradient")!;
+    expect(gradient.style.backgroundImage).toContain("var(--output-");
+    const sample = container.querySelector(".sample")!;
+    expect(sample.getAttribute("fill")).toBe(
+      PALETTE.output.css(CHECKPOINT.dataset.samples.y[0]),
+    );
   });
 
-  it("reads the same colour for a value as the network's nodes do", () => {
-    const network = document.createElement("div");
-    document.body.append(network);
-    const nodes = createNetworkView({
-      container: network,
-      layerSizes: CHECKPOINT.architecture.layerSizes,
-      idPrefix: "shared-scale",
-      onSelect: () => {},
-    });
-    // Away from the centre, so neither input is the colour map's zero.
-    explorer.setProbe({ kind: "free", x: [0.73, -0.41] });
-    const snapshot = explorer.snapshot();
-    nodes.render(snapshot, "activations", SCALE);
-    view.render(snapshot, { surface: SURFACE, scale: SCALE, showSamples: false });
-
-    // The first input's node, the bar along that axis and the surface all
-    // take their colour from one scale: the node fill is exactly the colour
-    // that scale gives the probe's coordinate.
-    const input = network.querySelector('[data-key="n:0:0"]')!;
-    expect(input.getAttribute("fill")).toBe(SCALE.css(snapshot.x[0]));
-    const bar = container.querySelector<HTMLElement>(".axis-bar-x")!;
-    expect(bar.style.backgroundImage).toContain(SCALE.css(CHECKPOINT.dataset.domain[0][0]));
-
-    // And the output node is the colour of the surface under the probe.
-    const last = CHECKPOINT.architecture.layerSizes.length - 1;
-    const output = network.querySelector(`[data-key="n:${last}:0"]`)!;
-    expect(output.getAttribute("fill")).toBe(SCALE.css(snapshot.trace.output));
+  it("draws the whole sweep, one point per sample", () => {
+    const current = frame();
+    view.render(explorer.snapshot(), current);
+    const curve = container.querySelector(".io-slice-x1 .slice-curve")!;
+    expect(curve.getAttribute("points")!.split(" ")).toHaveLength(
+      current.slices[0].inputs.length,
+    );
   });
 });
 
-
-describe("the output space", () => {
+describe("the network's node colours", () => {
   let container: HTMLElement;
   let explorer: Explorer;
-  let view: OutputSpaceView;
+  let view: NetworkView;
 
-  function slicesFor(): ReturnType<typeof outputSlice>[] {
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.replaceChildren(container);
+    explorer = createExplorer(CHECKPOINT);
+    explorer.setProbe({ kind: "free", x: [0.649, -0.64] });
+    view = createNetworkView({
+      container,
+      layerSizes: CHECKPOINT.architecture.layerSizes,
+      idPrefix: "families",
+      onSelect: () => {},
+    });
+  });
+
+  it("FILLS EACH NODE FROM ITS OWN FAMILY's MAP", () => {
     const snapshot = explorer.snapshot();
-    return CHECKPOINT.dataset.domain.map((_, axis) =>
-      outputSlice(CHECKPOINT.parameters, ACTIVATION, CHECKPOINT.dataset.domain, snapshot.x, axis),
+    view.render(snapshot, "weights", PALETTE);
+    const last = CHECKPOINT.architecture.layerSizes.length - 1;
+
+    const input = container.querySelector('[data-key="n:0:0"]')!;
+    expect(input.getAttribute("fill")).toBe(PALETTE.input.css(snapshot.x[0]));
+
+    // A hidden unit wears its bias, not its activation.
+    const hidden = container.querySelector('[data-key="n:1:0"]')!;
+    expect(hidden.getAttribute("fill")).toBe(
+      PALETTE.param.css(snapshot.parameters[0].b[0]),
     );
+    expect(hidden.getAttribute("fill")).not.toBe(
+      PALETTE.param.css(snapshot.trace.act[1][0]),
+    );
+
+    const output = container.querySelector(`[data-key="n:${last}:0"]`)!;
+    expect(output.getAttribute("fill")).toBe(PALETTE.output.css(snapshot.trace.output));
+  });
+
+  it("still shows the activation as the number on a hidden node", () => {
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, "weights", PALETTE);
+    const hidden = container.querySelector('[data-key="n:1:0"]')!;
+    expect(hidden.getAttribute("aria-label")).toContain(
+      `activation ${format(snapshot.trace.act[1][0])}`,
+    );
+    expect(hidden.getAttribute("aria-label")).toContain(
+      `bias ${format(snapshot.parameters[0].b[0])}`,
+    );
+  });
+
+  it("does not change a node's colour when the edge mode changes", () => {
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, "weights", PALETTE);
+    const before = container.querySelector('[data-key="n:1:0"]')!.getAttribute("fill");
+    view.render(snapshot, "contributions", PALETTE);
+    expect(container.querySelector('[data-key="n:1:0"]')!.getAttribute("fill")).toBe(before);
+  });
+});
+
+describe("the parameters → output panel", () => {
+  let container: HTMLElement;
+  let explorer: Explorer;
+  let view: ParamSpaceView;
+  let edited: [ParameterRef, number] | null = null;
+
+  const WEIGHT_REF: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
+
+  function frame() {
+    const snapshot = explorer.snapshot();
+    const curves = parameterCurves(
+      snapshot.parameters,
+      ACTIVATION,
+      snapshot.x,
+      PALETTE.param.limit,
+    );
+    return {
+      curves,
+      scale: PALETTE.param,
+      outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
+    };
   }
 
   beforeEach(() => {
@@ -356,57 +331,84 @@ describe("the output space", () => {
     document.body.replaceChildren(container);
     explorer = createExplorer(CHECKPOINT);
     explorer.setProbe({ kind: "free", x: [0.649, -0.64] });
-    view = createOutputSpaceView({ container, dataset: CHECKPOINT.dataset });
+    edited = null;
+    view = createParamSpaceView({
+      container,
+      onEdit: (ref, value) => {
+        edited = [ref, value];
+        explorer.setParameter(ref, value);
+      },
+    });
   });
 
-  it("draws one plot per input, each over the shared colour scale", () => {
-    view.render(explorer.snapshot(), { slices: slicesFor(), scale: SCALE });
-    const plots = container.querySelectorAll(".slice");
-    expect(plots).toHaveLength(CHECKPOINT.dataset.inputNames.length);
-    for (const gradient of Array.from(container.querySelectorAll<HTMLElement>(".slice-gradient"))) {
-      // Upright: the top of the plot is +limit, so the gradient runs to top.
-      expect(gradient.style.backgroundImage).toContain("linear-gradient(to top");
-      expect(gradient.style.backgroundImage).toContain(SCALE.css(SCALE.limit));
-      expect(gradient.style.backgroundImage).toContain(SCALE.css(-SCALE.limit));
-    }
-  });
-
-  it("captions each plot with the input it is holding, and where", () => {
-    view.render(explorer.snapshot(), { slices: slicesFor(), scale: SCALE });
-    const captions = Array.from(container.querySelectorAll(".slice-caption")).map(
-      (node) => node.textContent,
+  it("draws one curve and one dot per parameter", () => {
+    const current = frame();
+    view.render(explorer.snapshot(), current);
+    const count = CHECKPOINT.parameters.reduce(
+      (total, layer) => total + layer.W.flat().length + layer.b.length,
+      0,
     );
-    expect(captions[0]).toBe("ŷ(x1) at x2 = -0.640");
-    expect(captions[1]).toBe("ŷ(x2) at x1 = 0.649");
+    expect(current.curves).toHaveLength(count);
+    expect(container.querySelectorAll(".param-curve")).toHaveLength(count);
+    expect(container.querySelectorAll(".param-dot")).toHaveLength(count);
   });
 
-  it("MARKS THE PROBE AT THE PREDICTION's HEIGHT in both plots", () => {
-    const snapshot = explorer.snapshot();
-    view.render(snapshot, { slices: slicesFor(), scale: SCALE });
-    const svg = container.querySelector(".slice-marks")!;
-    const height = Number(svg.getAttribute("viewBox")!.split(" ")[3]);
-    const expected = height / 2 - (snapshot.trace.output / SCALE.limit) * (height / 2);
-    for (const dot of Array.from(container.querySelectorAll(".slice-point"))) {
-      // Both slices pass through the probe, so both dots sit at one height.
-      // The attribute is written to two decimals of SVG user units.
-      expect(Number(dot.getAttribute("cy"))).toBeCloseTo(expected, 2);
+  it("PUTS EVERY DOT ON THE OUTPUT LINE, which is the panel's whole claim", () => {
+    view.render(explorer.snapshot(), frame());
+    const level = Number(container.querySelector(".output-level")!.getAttribute("y1"));
+    for (const dot of Array.from(container.querySelectorAll(".param-dot"))) {
+      expect(Number(dot.getAttribute("cy"))).toBeCloseTo(level, 2);
     }
   });
 
-  it("draws the whole sweep, one point per sample", () => {
-    const slices = slicesFor();
-    view.render(explorer.snapshot(), { slices, scale: SCALE });
-    const curve = container.querySelector(".slice-curve")!;
-    expect(curve.getAttribute("points")!.split(" ")).toHaveLength(slices[0].inputs.length);
+  it("highlights the selected parameter's curve and nothing else", () => {
+    view.render(explorer.snapshot(), frame());
+    expect(container.querySelectorAll(".param-curve.is-selected")).toHaveLength(0);
+
+    explorer.selectParameter(WEIGHT_REF);
+    view.render(explorer.snapshot(), frame());
+    expect(container.querySelectorAll(".param-curve.is-selected")).toHaveLength(1);
+    expect(container.querySelectorAll(".param-dot.is-selected")).toHaveLength(1);
   });
 
-  it("says so when a curve runs past the scale instead of hiding the clipping", () => {
-    const slices = slicesFor();
-    view.render(explorer.snapshot(), { slices, scale: SCALE });
-    expect(container.querySelector(".legend")!.textContent).not.toContain("cut off");
+  it("puts the slider on the same axis as the plot, disabled until something is selected", () => {
+    view.render(explorer.snapshot(), frame());
+    const slider = container.querySelector<HTMLInputElement>(".param-slider")!;
+    expect(slider.disabled).toBe(true);
+    expect(Number(slider.min)).toBeCloseTo(-PALETTE.param.limit, 12);
+    expect(Number(slider.max)).toBeCloseTo(PALETTE.param.limit, 12);
 
-    // A scale far too small for this model: the curve leaves the box.
-    view.render(explorer.snapshot(), { slices, scale: createColorScale(0.05) });
-    expect(container.querySelector(".legend")!.textContent).toContain("cut off");
+    explorer.selectParameter(WEIGHT_REF);
+    view.render(explorer.snapshot(), frame());
+    expect(slider.disabled).toBe(false);
+    expect(Number(slider.value)).toBeCloseTo(
+      CHECKPOINT.parameters[0].W[1][0],
+      6,
+    );
+  });
+
+  it("EDITS THE SELECTED PARAMETER as the slider is dragged", () => {
+    explorer.selectParameter(WEIGHT_REF);
+    view.render(explorer.snapshot(), frame());
+    const slider = container.querySelector<HTMLInputElement>(".param-slider")!;
+    slider.value = "0.25";
+    slider.dispatchEvent(new window.Event("input", { bubbles: true }));
+    expect(edited).toEqual([WEIGHT_REF, 0.25]);
+    expect(explorer.snapshot().parameters[0].W[1][0]).toBe(0.25);
+
+    // And the redrawn plot follows the new state: the dots are still on the
+    // line, which has moved with the output.
+    view.render(explorer.snapshot(), frame());
+    const level = Number(container.querySelector(".output-level")!.getAttribute("y1"));
+    for (const dot of Array.from(container.querySelectorAll(".param-dot"))) {
+      expect(Number(dot.getAttribute("cy"))).toBeCloseTo(level, 2);
+    }
+  });
+
+  it("carries the parameter colour scale on its x axis", () => {
+    view.render(explorer.snapshot(), frame());
+    const bar = container.querySelector<HTMLElement>(".param-axis")!;
+    expect(bar.style.backgroundImage).toContain("var(--param-");
+    expect(bar.style.backgroundImage).toContain(PALETTE.param.css(-PALETTE.param.limit));
   });
 });

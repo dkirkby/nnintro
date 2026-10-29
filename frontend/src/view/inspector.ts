@@ -125,16 +125,6 @@ export function createInspector(options: InspectorOptions): Inspector {
     number.className = "value-input";
     number.setAttribute("aria-label", `value of ${describeParameter(ref)}`);
 
-    // An adaptive range that still permits typed values beyond it.
-    const extent = Math.max(2, Math.abs(value) * 2);
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = String(-extent);
-    slider.max = String(extent);
-    slider.step = String(extent / 500);
-    slider.value = String(value);
-    slider.setAttribute("aria-label", `slider for ${describeParameter(ref)}`);
-
     const commit = (raw: string) => {
       const next = Number(raw);
       if (!Number.isFinite(next)) {
@@ -145,7 +135,9 @@ export function createInspector(options: InspectorOptions): Inspector {
       number.setCustomValidity("");
       onEdit(ref, next);
     };
-    slider.addEventListener("input", () => commit(slider.value));
+    // The slider lives under the parameters-to-output plot, on that plot's
+    // own axis; this field is for a value typed exactly, or one past the
+    // ends of that axis.
     number.addEventListener("change", () => commit(number.value));
 
     const restore = document.createElement("button");
@@ -153,7 +145,7 @@ export function createInspector(options: InspectorOptions): Inspector {
     restore.textContent = "Restore this parameter";
     restore.addEventListener("click", () => onRestore(ref));
 
-    controls.append(slider, number, restore);
+    controls.append(number, restore);
     section.append(controls);
 
     const gradient = snapshot.pointGradient;
