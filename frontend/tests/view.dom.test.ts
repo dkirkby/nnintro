@@ -23,7 +23,6 @@ const WEIGHT: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 const SURFACE = outputSurface(CHECKPOINT.parameters, ACTIVATION, CHECKPOINT.dataset.domain, 12);
 const PALETTE: Palette = {
-  input: createColorScale(niceLimit(CHECKPOINT.dataset.domain.flat()), "input"),
   param: createColorScale(
     niceLimit(
       CHECKPOINT.parameters.flatMap((layer) => layer.W.flat()),
@@ -63,10 +62,61 @@ describe("the network view", () => {
   it("renders one edge per weight and one node per unit", () => {
     const sizes = CHECKPOINT.architecture.layerSizes;
     const expectedEdges = sizes.slice(0, -1).reduce((sum, n, i) => sum + n * sizes[i + 1], 0);
-    expect(container.querySelectorAll('[data-key^="e:"]')).toHaveLength(expectedEdges);
+    expect(container.querySelectorAll('.dn-edge[data-key^="e:"]')).toHaveLength(expectedEdges);
     expect(container.querySelectorAll('[data-key^="n:"]')).toHaveLength(
       sizes.reduce((a, b) => a + b, 0),
     );
+    // Plus a wide transparent twin for each, so a hairline is clickable.
+    expect(container.querySelectorAll(".edge-target")).toHaveLength(expectedEdges);
+  });
+
+  it("GIVES A ZERO-WEIGHT EDGE A VISIBLE, SELECTABLE FORM", () => {
+    explorer.setParameter(WEIGHT, 0);
+    view.render(explorer.snapshot(), "weights", PALETTE);
+    const edge = container.querySelector('.dn-edge[data-key="e:0:0:1"]')!;
+    // Dotted grey from CSS, since the colour scale has nothing to show.
+    expect(edge.classList).toContain("is-faint");
+
+    // And the wide transparent twin carries the same key, so a click on it
+    // selects the weight even where the line itself is a hairline.
+    const target = container.querySelector('.edge-target[data-key="e:0:0:1"]')!;
+    target.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(selected).toEqual(WEIGHT);
+  });
+
+  it("RAILS A SELECTED EDGE IN BLACK on either side, leaving it its colour", () => {
+    explorer.selectParameter(WEIGHT);
+    view.render(explorer.snapshot(), "weights", PALETTE);
+    const rails = Array.from(container.querySelectorAll<SVGLineElement>(".edge-outline"));
+    expect(rails).toHaveLength(2);
+
+    const edge = container.querySelector<SVGLineElement>('.dn-edge[data-key="e:0:0:1"]')!;
+    const at = (node: SVGLineElement) => ({
+      x: (Number(node.getAttribute("x1")) + Number(node.getAttribute("x2"))) / 2,
+      y: (Number(node.getAttribute("y1")) + Number(node.getAttribute("y2"))) / 2,
+      dx: Number(node.getAttribute("x2")) - Number(node.getAttribute("x1")),
+      dy: Number(node.getAttribute("y2")) - Number(node.getAttribute("y1")),
+    });
+    const line = at(edge);
+    const [one, two] = rails.map(at);
+    // Parallel to the edge, and offset to opposite sides of it by the same
+    // distance, so the edge itself is untouched between them.
+    // Coordinates are written to two decimals of SVG user units.
+    for (const rail of [one, two]) {
+      expect(rail.dx).toBeCloseTo(line.dx, 1);
+      expect(rail.dy).toBeCloseTo(line.dy, 1);
+    }
+    expect(one.x - line.x).toBeCloseTo(line.x - two.x, 1);
+    expect(one.y - line.y).toBeCloseTo(line.y - two.y, 1);
+    expect(Math.hypot(one.x - line.x, one.y - line.y)).toBeGreaterThan(0.5);
+    // The edge keeps the colour the scale gave it.
+    expect(edge.getAttribute("stroke")).toContain("var(--param-");
+
+    // A node wears the outline itself, and only one thing is ever selected.
+    explorer.selectParameter({ kind: "bias", layer: 0, out: 2 });
+    view.render(explorer.snapshot(), "weights", PALETTE);
+    expect(container.querySelectorAll(".edge-outline")).toHaveLength(0);
+    expect(container.querySelectorAll(".dn-node.is-selected")).toHaveLength(1);
   });
 
   it("clicking an edge selects the weight that edge represents", () => {
@@ -216,15 +266,17 @@ describe("the input \u2192 output panel", () => {
     }
   });
 
-  it("KEEPS THE TWO FAMILIES APART: axis bars read inputs, slices read outputs", () => {
+it("labels the two axes in plain text, with no colour of their own", () => {
     view.render(explorer.snapshot(), frame(true));
-    const bar = container.querySelector<HTMLElement>(".axis-bar-x")!;
-    expect(bar.style.backgroundImage).toContain("var(--input-");
-    expect(bar.style.backgroundImage).not.toContain("var(--output-");
-    expect(bar.style.backgroundImage).toContain(
-      PALETTE.input.css(CHECKPOINT.dataset.domain[0][0]),
-    );
+    const strip = container.querySelector<HTMLElement>(".axis-strip-x")!;
+    expect(strip.style.backgroundImage).toBe("");
+    expect(Array.from(strip.children).map((node) => node.textContent)).toEqual([
+      String(CHECKPOINT.dataset.domain[0][0]),
+      CHECKPOINT.dataset.inputNames[0],
+      String(CHECKPOINT.dataset.domain[0][1]),
+    ]);
 
+    // The output family is still the one that colours this panel.
     const gradient = container.querySelector<HTMLElement>(".io-slice-x1 .slice-gradient")!;
     expect(gradient.style.backgroundImage).toContain("var(--output-");
     const sample = container.querySelector(".sample")!;
@@ -266,8 +318,10 @@ describe("the network's node colours", () => {
     view.render(snapshot, "weights", PALETTE);
     const last = CHECKPOINT.architecture.layerSizes.length - 1;
 
+    // An input carries no colour: its value is a coordinate, and the
+    // input-to-output panel's axes are where coordinates are read.
     const input = container.querySelector('[data-key="n:0:0"]')!;
-    expect(input.getAttribute("fill")).toBe(PALETTE.input.css(snapshot.x[0]));
+    expect(input.getAttribute("fill")).toBe("var(--surface)");
 
     // A hidden unit wears its bias, not its activation.
     const hidden = container.querySelector('[data-key="n:1:0"]')!;
@@ -321,7 +375,8 @@ describe("the parameters → output panel", () => {
     );
     return {
       curves,
-      scale: PALETTE.param,
+      paramScale: PALETTE.param,
+      outputScale: PALETTE.output,
       outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
     };
   }
@@ -405,10 +460,20 @@ describe("the parameters → output panel", () => {
     }
   });
 
-  it("carries the parameter colour scale on its x axis", () => {
-    view.render(explorer.snapshot(), frame());
+  it("carries the parameter scale on its x axis and the output scale up its back", () => {
+    const current = frame();
+    view.render(explorer.snapshot(), current);
     const bar = container.querySelector<HTMLElement>(".param-axis")!;
     expect(bar.style.backgroundImage).toContain("var(--param-");
     expect(bar.style.backgroundImage).toContain(PALETTE.param.css(-PALETTE.param.limit));
+
+    const plot = container.querySelector<SVGElement>(".param-plot")!;
+    expect(plot.style.backgroundImage).toContain("linear-gradient(to top");
+    expect(plot.style.backgroundImage).toContain("var(--output-");
+    // Over this plot's own axis, which is taller than the output scale's
+    // limit, so its ends are the saturated colour.
+    expect(plot.style.backgroundImage).toContain(
+      PALETTE.output.css(current.outputLimit),
+    );
   });
 });

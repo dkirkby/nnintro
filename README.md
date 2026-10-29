@@ -7,7 +7,8 @@ changed.
 
 [`PLAN.md`](PLAN.md) is the design spec. **Stage 0 (the numerical and visual
 spike) is implemented**: one dataset, one network, the PyTorch export, the
-nnet-svg adapter, editable weights and biases, and the downstream pulse.
+nnet-svg adapter, editable weights and biases, and the downstream-effect
+analysis.
 Stages 1–2 complete the initial release.
 
 ## Layout

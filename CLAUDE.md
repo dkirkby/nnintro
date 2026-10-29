@@ -24,11 +24,11 @@ often needed are §3 (dataset/architecture catalog), §7 (technical design), §8
 
 Stage 0 — the numerical and visual spike — is done: one dataset, one network,
 the PyTorch export with golden fixtures, the nnet-svg adapter, editable
-weights and biases, and the downstream pulse. `README.md` documents the export
+weights and biases, and the downstream-effect analysis. `README.md` documents the export
 schema that joins the two halves and the deviations from `PLAN.md`; keep both
 current when that contract changes.
 
-The "Input → output" panel is one figure on shared axes: the ŷ(x₁, x₂) map,
+The "Inputs → output" panel is one figure on shared axes: the ŷ(x₁, x₂) map,
 ŷ(x₁) below it holding x₂ at the probe, and ŷ(x₂) to its left holding x₁,
 rotated so x₂ still runs upward and ŷ grows away from the map. One pair of
 crosshairs crosses all three and each slice's curve meets it at the
@@ -45,9 +45,10 @@ that parameter alone is swept across the parameter scale, everything else
 held. Every curve passes through the current output at the current value, so
 **every dot lands on the horizontal output line** — the quickest check that
 the panel is right, and what `tests/view.dom.test.ts` asserts. The parameter
-colour bar is that panel's x axis, and the editing slider sits under it on
-the same axis; the inspector keeps the typed value and the restore button
-for values beyond the axis.
+colour bar is that panel's x axis, its background is the output scale stood
+up (so a curve's height and the colour behind it are the same number), and
+the editing slider sits under the bar on the same axis; the inspector keeps
+the typed value and the restore button for values beyond the axis.
 
 Stage 1 is mostly catalog growth: `CATALOG` in `src/nnintro/cli.py` has one
 entry and needs the other 75, and the UI needs the depth/width/activation
@@ -65,7 +66,7 @@ uv run pytest            # 26 pipeline tests, ~1 s
 cd frontend
 npm ci                   # npm install needs --legacy-peer-deps on a fresh
                          # resolve; see README
-npm run test             # 82 vitest tests, including the golden fixtures
+npm run test             # 124 vitest tests, including the golden fixtures
 npm run typecheck
 npm run build            # static site -> frontend/dist
 ```
@@ -123,12 +124,12 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
 - `state.ts` owns the baseline/working split, selection, history, and the one
   versioned snapshot every view consumes.
 - `view/adapter.ts` is the **only** place model and renderer indices meet.
-- `view/colormap.ts` owns all three colour maps. `main.ts` builds one
+- `view/colormap.ts` owns both colour maps. `main.ts` builds one
   `Palette` per render and hands the same object to both panels.
 - `view/network.ts`, `view/inputoutput.ts`, `view/paramspace.ts`,
   `view/inspector.ts` render a snapshot and own no mathematics.
 
-### Two invariants that are easy to break
+### Invariants that are easy to break
 
 - **Training alone does not produce a teaching asset.** Plain training on the
   tilted plane reliably routes everything through one hidden unit and leaves
@@ -138,21 +139,36 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   ReLU kink crossing the visible domain), and the report is exported under
   `selection` so the choice can be audited. Only 2 of 24 attempts pass, so do
   not "simplify" this back to a single `train()` call.
-- **Three colour maps, one per family of quantity.** `view/colormap.ts` owns
-  them: **input** (brown/teal) for the two coordinates — the input nodes and
-  the two axis bars; **param** (magenta/green) for weights and biases — every
-  edge, and the hidden nodes, which are filled by their bias while their
-  number stays the activation; **output** (red/blue) for the prediction — the
-  surface, the slice backgrounds, the samples and the output node. A single
-  map across all three made every panel look alike and invited comparisons
-  between unrelated numbers, so do not re-merge them. Within a family a
-  colour still means one number: the output node is the colour of the surface
-  under the probe, and an input node is the colour its axis bar shows at that
-  coordinate. Each limit is a function of the parameters and the dataset
-  alone, never of the probe, or dragging the probe would recolour the panel
-  under it. Zero is the neutral surface colour: do not reintroduce a
+- **Two colour maps, one per family of quantity.** `view/colormap.ts` owns
+  them: **param** (magenta/green) for weights and biases — every edge, and
+  the hidden nodes, which are filled by their bias while their number stays
+  the activation; **output** (red/blue) for the prediction — the surface, the
+  slice backgrounds, the samples, the output node and the background of the
+  parameters-to-output plot. A single map across every quantity made each
+  panel look like the others and invited comparisons between unrelated
+  numbers, so do not re-merge them. The inputs had a third map and no longer
+  do: their axes carry their numbers, so input nodes are left unfilled and
+  the two axes are plain label strips. Do not add it back without a use.
+  Within a family a colour means one number: the output node is the colour of
+  the surface under the probe. Each limit is a function of the parameters and
+  the dataset alone, never of the probe, or dragging the probe would recolour
+  the panel under it. Zero is the neutral surface colour: do not reintroduce a
   brightness floor to make small values visible, because it moves zero off
   neutral. Edge widths carry that floor instead.
+- **An edge the scale cannot show still has to be visible and selectable.**
+  Below 5% of the scale an edge is drawn as a dotted grey line (`.is-faint`,
+  a CSS rule, which outranks the renderer's `stroke` presentation attribute),
+  and every edge carries a wide transparent twin with the same `data-key` for
+  clicking. The twins go between nnet-svg's `.dn-edges` and `.dn-items`
+  groups, or they would swallow clicks meant for a node. An edge's width
+  ramps from 2.2 to 7 user units over the scale; the floor is that high
+  because the view box (680 units) is wider than the panel that renders it,
+  so a 1-unit stroke lands under a pixel and reads as nothing at all.
+- **Selection is black, never the accent.** The accent green is a parameter
+  colour now. A selected node takes a thick ink outline of its own; a
+  selected edge keeps its own colour *and* its own thickness and is railed
+  by two thin ink lines, one along each side, offset along the edge's normal
+  in a group inserted before `.dn-edges`.
 - **The slices' value axis is the output scale, not their own range.** That
   is what makes a slice's height and its background two readings of one
   number, and its ticks are the only numbers the output scale has. Fitting

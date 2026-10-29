@@ -1,5 +1,5 @@
 /**
- * Input → output: the map from the two inputs to the prediction, drawn three
+ * Inputs → output: the map from the two inputs to the prediction, drawn three
  * ways that share their axes.
  *
  * The square in the corner is ŷ(x₁, x₂). Below it, sharing its x₁ axis, is
@@ -8,10 +8,9 @@
  * from the map. The crosshairs are one pair of lines that crosses all three:
  * where they meet is the probe, and each slice meets its own curve there.
  *
- * Both colour families in the panel are legible from it: the two thin bars
- * between the map and the slices are the input scale, and the slice
- * backgrounds are the output scale, so a slice's height and its background
- * are two readings of the same number.
+ * The slice backgrounds are the output scale, so a slice's height and its
+ * background are two readings of the same number. The inputs have no colour
+ * of their own: their axes carry their numbers.
  *
  * Canvas for the dense surface, SVG above it for everything pickable.
  */
@@ -67,14 +66,14 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
   map.className = "io-map";
   map.append(canvas, mapSvg);
 
-  const xBar = axisBar("x", dataset.inputNames[0] ?? "x₁", x1lo, x1hi);
-  const yBar = axisBar("y", dataset.inputNames[1] ?? "x₂", x2lo, x2hi);
+  const xAxis = axisStrip("x", dataset.inputNames[0] ?? "x₁", x1lo, x1hi);
+  const yAxis = axisStrip("y", dataset.inputNames[1] ?? "x₂", x2lo, x2hi);
   const below = slicePanel("x1");
   const left = slicePanel("x2");
 
   const grid = document.createElement("div");
   grid.className = "io-grid";
-  grid.append(left.element, yBar.element, map, xBar.element, below.element);
+  grid.append(left.element, yAxis, map, xAxis, below.element);
   container.replaceChildren(grid);
 
   const toPixelX = (x: number) => ((x - x1lo) / (x1hi - x1lo)) * MAP;
@@ -123,8 +122,6 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
   function render(snapshot: Snapshot, frame: InputOutputFrame): void {
     const { surface, slices, palette, showSamples } = frame;
     drawSurface(surface, palette.output);
-    xBar.paint(palette.input);
-    yBar.paint(palette.input);
 
     const px = toPixelX(snapshot.x[0]);
     const py = toPixelY(snapshot.x[1]);
@@ -296,38 +293,19 @@ function slicePanel(axis: "x1" | "x2"): {
 }
 
 /**
- * One axis colour bar: the colour an input of that coordinate takes, which is
- * also the colour its input node takes. The bar spans the dataset's domain,
- * not the whole colour scale, so it reads as part of the axis.
+ * One axis: its name and its two ends. The inputs carry no colour of their
+ * own — these axes are where their values are read — so this is a label
+ * strip, not a bar.
  */
-function axisBar(
-  orientation: "x" | "y",
-  name: string,
-  lo: number,
-  hi: number,
-): { element: HTMLElement; paint: (scale: ColorScale) => void } {
-  const element_ = document.createElement("div");
-  element_.className = `axis-bar axis-bar-${orientation}`;
-  element_.setAttribute("role", "img");
-  const label = document.createElement("span");
-  label.className = "axis-bar-label";
-  label.textContent = name;
-  element_.append(label);
-  return {
-    element: element_,
-    paint(scale) {
-      element_.style.backgroundImage = gradientBar(
-        scale,
-        lo,
-        hi,
-        orientation === "x" ? "to right" : "to top",
-      );
-      element_.setAttribute(
-        "aria-label",
-        `${name} runs from ${lo} to ${hi}, coloured on the input scale`,
-      );
-    },
-  };
+function axisStrip(orientation: "x" | "y", name: string, lo: number, hi: number): HTMLElement {
+  const strip = document.createElement("div");
+  strip.className = `axis-strip axis-strip-${orientation}`;
+  for (const text of [String(lo), name, String(hi)]) {
+    const span = document.createElement("span");
+    span.textContent = text;
+    strip.append(span);
+  }
+  return strip;
 }
 
 /** A line plus the casing that keeps it legible over a saturated surface. */

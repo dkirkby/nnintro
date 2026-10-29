@@ -1,22 +1,24 @@
 /**
- * Three diverging colour maps, one per kind of quantity.
+ * Two diverging colour maps, one per kind of quantity.
  *
- * A single map across inputs, parameters and outputs made every panel look
- * alike and invited comparisons between numbers that have nothing to do with
- * each other, so the families are now visually distinct:
+ * A single map across every quantity made each panel look like the others
+ * and invited comparisons between numbers that have nothing to do with each
+ * other, so the families are visually distinct:
  *
- * - **input** (brown/teal) — the two input coordinates: the input nodes and
- *   the colour bars along the two axes of the input-to-output map.
  * - **param** (magenta/green) — weights and biases: every edge, and the
  *   hidden nodes, which are filled by their bias while still showing their
  *   activation as a number.
- * - **output** (red/blue) — the prediction: the surface, the two slice
- *   backgrounds, the samples and the output node.
+ * - **output** (red/blue) — the prediction: the surface, the slice
+ *   backgrounds, the samples, the output node, and the background of the
+ *   parameters-to-output plot.
  *
- * Within a family a colour still means one number, so the output node is the
- * colour of the surface under the probe and an input node is the colour its
- * axis bar shows at that coordinate. Across families it means nothing, which
- * is the point.
+ * The inputs had a third map. They do not need one: their two axes are the
+ * plot axes, which carry their own numbers, so the input nodes are left
+ * unfilled and the axes are plain. Do not add it back without a use.
+ *
+ * Within a family a colour means one number, so the output node is the
+ * colour of the surface under the probe. Across families it means nothing,
+ * which is the point.
  *
  * Zero is the neutral surface colour and the map is linear in the value, so
  * sign is readable and "nearly nothing" looks like nearly nothing.
@@ -38,12 +40,10 @@ interface Lab {
 }
 
 /** Which quantity a scale paints; see the module comment. */
-export type Family = "input" | "param" | "output";
+export type Family = "param" | "output";
 
 /** The light-theme tokens, used when the stylesheet is not reachable. */
 const FALLBACK: Record<string, Lab> = {
-  "--input-pos": fromOklch(55, 0.1, 195),
-  "--input-neg": fromOklch(50, 0.09, 70),
   "--param-pos": fromOklch(55, 0.15, 145),
   "--param-neg": fromOklch(55, 0.19, 345),
   "--output-pos": fromOklch(55, 0.16, 250),
@@ -186,9 +186,8 @@ function parseOklch(text: string): Lab | null {
   return fromOklch(Number(match[1]), Number(match[2]), Number(match[3]));
 }
 
-/** The three scales a render works with, built together in `main.ts`. */
+/** The scales a render works with, built together in `main.ts`. */
 export interface Palette {
-  input: ColorScale;
   param: ColorScale;
   output: ColorScale;
 }

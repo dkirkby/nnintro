@@ -7,10 +7,8 @@
   --ink: oklch(22% 0.02 250);
   --ink-dim: oklch(47% 0.02 250);
   --line: oklch(88% 0.01 250);
-  /* Three diverging families, one per kind of quantity: inputs brown/teal,
-     parameters magenta/green, outputs red/blue. See view/colormap.ts. */
-  --input-neg: oklch(50% 0.09 70);
-  --input-pos: oklch(55% 0.10 195);
+  /* Two diverging families: parameters magenta/green, outputs red/blue.
+     Inputs have no map; see view/colormap.ts. */
   --param-neg: oklch(55% 0.19 345);
   --param-pos: oklch(55% 0.15 145);
   --output-neg: oklch(58% 0.17 30);
@@ -27,8 +25,6 @@
     --ink: oklch(94% 0.01 250);
     --ink-dim: oklch(72% 0.015 250);
     --line: oklch(34% 0.015 250);
-    --input-neg: oklch(68% 0.09 70);
-    --input-pos: oklch(72% 0.10 195);
     --param-neg: oklch(70% 0.17 345);
     --param-pos: oklch(72% 0.14 145);
     --output-neg: oklch(70% 0.16 30);
@@ -44,8 +40,6 @@
   --ink: oklch(94% 0.01 250);
   --ink-dim: oklch(72% 0.015 250);
   --line: oklch(34% 0.015 250);
-  --input-neg: oklch(68% 0.09 70);
-  --input-pos: oklch(72% 0.10 195);
   --param-neg: oklch(70% 0.17 345);
   --param-pos: oklch(72% 0.14 145);
   --output-neg: oklch(70% 0.16 30);
@@ -127,8 +121,8 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 }
 .io-slice-x2 { grid-area: 1 / 1; }
 .io-slice-x1 { grid-area: 3 / 3; aspect-ratio: 4 / 1; }
-.axis-bar-y { grid-area: 1 / 2; }
-.axis-bar-x { grid-area: 2 / 3; }
+.axis-strip-y { grid-area: 1 / 2; }
+.axis-strip-x { grid-area: 2 / 3; }
 
 .io-canvas,
 .io-marks {
@@ -166,19 +160,17 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .crosshair { stroke: var(--ink); stroke-width: 1.25; }
 .crosshair-casing { stroke: var(--surface); stroke-width: 3.25; opacity: 0.55; }
 
-.axis-bar { position: relative; border: 1px solid var(--line); border-radius: 4px; }
-.axis-bar-label {
-  position: absolute;
-  inset: 0;
+/* Plain axes: the inputs have no colour map, so these carry their numbers. */
+.axis-strip {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   font-size: 9px;
-  color: var(--ink);
-  /* Doubled so the label survives either end of the colour scale. */
-  text-shadow: 0 0 2px var(--surface), 0 0 2px var(--surface);
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
 }
-.axis-bar-y .axis-bar-label { writing-mode: vertical-rl; transform: rotate(180deg); }
+.axis-strip-y { flex-direction: column-reverse; }
+.axis-strip-y span { writing-mode: vertical-rl; transform: rotate(180deg); }
 
 /* Samples carry their target on the output scale, so a dot that vanishes
    into the surface behind it is one the model already fits. Held-out points
@@ -194,17 +186,20 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
   height: auto;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--surface);
+  /* The output scale is painted on as a background image per render. */
+  background-color: var(--surface);
 }
-.param-curve { fill: none; stroke: var(--ink-dim); stroke-width: 1; opacity: 0.45; }
-.param-curve.is-selected { stroke: var(--accent); stroke-width: 2.5; opacity: 1; }
-.param-dot { fill: var(--ink-dim); stroke: var(--surface); stroke-width: 1; }
-.param-dot.is-selected { fill: var(--accent); stroke-width: 1.5; }
-.param-zero { stroke: var(--line); stroke-width: 1; }
+.param-curve { fill: none; stroke: var(--ink); stroke-width: 1; opacity: 0.4; }
+.param-curve.is-selected { stroke: var(--ink); stroke-width: 2.5; opacity: 1; }
+.param-dot { fill: var(--surface); stroke: var(--ink); stroke-width: 1; }
+.param-dot.is-selected { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
 .output-level { stroke: var(--ink); stroke-width: 1.25; stroke-dasharray: 5 3; }
+.param-zero { stroke: var(--ink-dim); stroke-width: 0.75; opacity: 0.5; }
 
 .param-axis {
   display: flex;
+  border: 1px solid var(--line);
+  border-radius: 4px;
   align-items: center;
   justify-content: space-between;
   height: 14px;
@@ -214,7 +209,7 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-.param-axis span { position: static; text-shadow: 0 0 2px var(--surface), 0 0 2px var(--surface); }
+.param-axis span { text-shadow: 0 0 2px var(--surface), 0 0 2px var(--surface); }
 .param-slider { width: 100%; margin: 6px 0 0; }
 .param-slider:disabled { opacity: 0.45; }
 
@@ -223,7 +218,24 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .dn-edge { cursor: pointer; }
 .dn-node { cursor: pointer; stroke: var(--line); }
 .dn-node-label { font-size: 9px; fill: var(--ink); paint-order: stroke; stroke: var(--surface-2); stroke-width: 2.5px; }
-.is-selected { stroke: var(--accent) !important; stroke-width: 4 !important; }
+
+/* An edge whose value the colour scale cannot show: dotted grey says "too
+   small to see here" rather than leaving an invisible line. The rule beats
+   the stroke attribute the renderer sets, which is a presentation attribute. */
+/* Half-strength ink rather than --line, so it reads as light grey against
+   either theme's panel. */
+.dn-edge.is-faint { stroke: var(--ink-dim); stroke-opacity: 0.55; stroke-dasharray: 2 3; }
+
+/* Selection is black, not accent: the accent green is a parameter colour.
+   A node wears a thick outline of its own; an edge keeps its colour and gets
+   a thin outline drawn underneath it (see view/network.ts). */
+.dn-node.is-selected { stroke: var(--ink); stroke-width: 3; }
+.edge-outline { stroke: var(--ink); stroke-width: 1; }
+.edge-outline.is-faint { stroke-dasharray: 2 3; }
+
+/* A hairline is a poor click target, so every edge carries a wide
+   transparent one, between the edges and the nodes so a node still wins. */
+.edge-target { stroke: transparent; stroke-width: 12; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Readouts */

@@ -60,7 +60,7 @@ async function start(): Promise<void> {
     <div class="controls" id="controls"></div>
     <div class="workspace">
       <section class="panel io-panel">
-        <h2>Input → output</h2>
+        <h2>Inputs → output</h2>
         <div id="input-output"></div>
         <p class="legend" id="input-legend"></p>
       </section>
@@ -137,7 +137,6 @@ async function start(): Promise<void> {
    * of where the probe is, so dragging the probe cannot recolour anything
    * underneath it:
    *
-   * - **input**: the domain the two axis bars span.
    * - **param**: every weight and bias, so an edge and a hidden node's fill
    *   are the same quantity on the same scale.
    * - **output**: the whole prediction surface and the targets, which count
@@ -147,7 +146,6 @@ async function start(): Promise<void> {
     const weights = snapshot.parameters.flatMap((layer) => layer.W.flat());
     const biases = snapshot.parameters.flatMap((layer) => layer.b);
     return {
-      input: createColorScale(niceLimit(dataset.domain.flat()), "input"),
       param: createColorScale(niceLimit(weights, biases), "param"),
       output: createColorScale(
         niceLimit([surface.extent], dataset.samples.y),
@@ -178,7 +176,8 @@ async function start(): Promise<void> {
     inputOutput.render(snapshot, { surface, slices, palette, showSamples });
     paramSpace.render(snapshot, {
       curves,
-      scale: palette.param,
+      paramScale: palette.param,
+      outputScale: palette.output,
       // Tall enough for every curve, so no sweep is cut off at an edge the
       // reader cannot see.
       outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
@@ -195,8 +194,7 @@ async function start(): Promise<void> {
       `${dataset.inputNames[0]} = ${format(snapshot.x[0])}; below, ` +
       `${dataset.inputNames[0]} varies at ${dataset.inputNames[1]} = ` +
       `${format(snapshot.x[1])}. Slice height and background are the same ` +
-      `±${palette.output.limit} output scale; the two bars are the input ` +
-      `scale, which the input nodes also use.` +
+      `±${palette.output.limit} output scale.` +
       (showSamples ? " Dashed marks are held-out samples." : "");
   }
 

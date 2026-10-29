@@ -9,7 +9,9 @@
  * ∂ŷ/∂θ, and a bend is a ReLU switching on or off.
  *
  * The parameter colour scale is the x axis, and the slider under it edits
- * whichever parameter is selected, along that same axis.
+ * whichever parameter is selected, along that same axis. The background is
+ * the output scale standing up, as in the slices, so a curve's height and
+ * the colour behind it are two readings of the same prediction.
  */
 
 import type { ParameterCurve } from "../model/curves.js";
@@ -29,7 +31,9 @@ export interface ParamSpaceView {
 export interface ParamSpaceFrame {
   curves: ParameterCurve[];
   /** The parameter scale: the x axis, and the colour bar under it. */
-  scale: ColorScale;
+  paramScale: ColorScale;
+  /** The output scale, painted up the background. */
+  outputScale: ColorScale;
   /** Half-height of the output axis, covering every curve. */
   outputLimit: number;
 }
@@ -48,12 +52,12 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
   svg.setAttribute("role", "img");
 
   const bar = document.createElement("div");
-  bar.className = "axis-bar param-axis";
+  bar.className = "param-axis";
   bar.setAttribute("role", "img");
   const low = document.createElement("span");
   const high = document.createElement("span");
   const name = document.createElement("span");
-  name.className = "axis-bar-label";
+  name.className = "param-axis-name";
   bar.append(low, name, high);
 
   const slider = document.createElement("input");
@@ -75,8 +79,13 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
   slider.addEventListener("input", onInput);
 
   function render(snapshot: Snapshot, frame: ParamSpaceFrame): void {
-    const { curves, scale, outputLimit } = frame;
+    const { curves, paramScale: scale, outputScale, outputLimit } = frame;
     selected = snapshot.selection;
+
+    // The background is the output scale over the axis this plot actually
+    // spans, which is taller than that scale's own limit; values past it
+    // saturate, exactly as they do on a node.
+    svg.style.backgroundImage = gradientBar(outputScale, -outputLimit, outputLimit, "to top");
 
     const toX = (value: number) => ((value + scale.limit) / (2 * scale.limit)) * PLOT.width;
     const toY = (value: number) =>

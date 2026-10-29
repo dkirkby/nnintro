@@ -77,36 +77,35 @@ describe("a colour scale", () => {
   });
 });
 
-describe("the three families", () => {
+describe("the families", () => {
   it("mix their own inks, so no two families share a colour", () => {
     const value = 0.7;
-    const colours = (["input", "param", "output"] as const).map((family) =>
+    const colours = (["param", "output"] as const).map((family) =>
       createColorScale(1, family).css(value),
     );
-    expect(colours[0]).toContain("var(--input-pos)");
-    expect(colours[1]).toContain("var(--param-pos)");
-    expect(colours[2]).toContain("var(--output-pos)");
-    expect(new Set(colours).size).toBe(3);
+    expect(colours[0]).toContain("var(--param-pos)");
+    expect(colours[1]).toContain("var(--output-pos)");
+    expect(new Set(colours).size).toBe(2);
   });
 
   it("paints distinct canvas colours for the same number", () => {
-    const painted = (["input", "param", "output"] as const).map((family) =>
+    const painted = (["param", "output"] as const).map((family) =>
       createColorScale(1, family).paint(0.7),
     );
-    expect(new Set(painted).size).toBe(3);
+    expect(new Set(painted).size).toBe(2);
   });
 
   it("agrees with itself about zero whatever the family", () => {
     // Zero is the surface colour in every family: the maps differ in their
     // inks, not in where neutral sits.
-    const zeros = (["input", "param", "output"] as const).map((family) =>
+    const zeros = (["param", "output"] as const).map((family) =>
       createColorScale(1, family).paint(0),
     );
     expect(new Set(zeros).size).toBe(1);
   });
 
   it("builds a gradient across a range for the bars", () => {
-    const scale = createColorScale(1.5, "input");
+    const scale = createColorScale(1.5, "param");
     expect(gradientBar(scale, -1, 1, "to right")).toBe(
       `linear-gradient(to right, ${scale.stops(-1, 1).join(", ")})`,
     );

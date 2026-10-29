@@ -14,7 +14,7 @@
  * activation layer `l + 1` is produced by parameter layer `l`.
  */
 
-import type { EdgeRef, NodeRef } from "nnet-svg";
+import type { NodeRef } from "nnet-svg";
 
 import type { LayerParameters, ParameterRef } from "../model/types.js";
 
@@ -41,10 +41,17 @@ export function nodeParameter(node: {
   return { kind: "bias", layer: node.layerIndex - 1, out: node.nodeIndex };
 }
 
+/** An edge as the renderer and the layout both describe it. */
+export type EdgeCoords = {
+  sourceLayerIndex: number;
+  sourceNodeIndex: number;
+  targetNodeIndex: number;
+};
+
 /** The value the renderer should show on an edge. */
 export function edgeWeight(
   parameters: LayerParameters[],
-  edge: EdgeRef,
+  edge: EdgeCoords,
 ): number | null {
   const ref = edgeParameter(edge);
   const layer = parameters[ref.layer];
@@ -67,7 +74,7 @@ export function nodeBias(
 export function edgeContribution(
   parameters: LayerParameters[],
   activations: number[][],
-  edge: EdgeRef,
+  edge: EdgeCoords,
 ): number | null {
   const weight = edgeWeight(parameters, edge);
   if (weight === null) return null;
@@ -76,11 +83,7 @@ export function edgeContribution(
 }
 
 /** A stable key for an edge, for selection and animation bookkeeping. */
-export function edgeKey(edge: {
-  sourceLayerIndex: number;
-  sourceNodeIndex: number;
-  targetNodeIndex: number;
-}): string {
+export function edgeKey(edge: EdgeCoords): string {
   return `e:${edge.sourceLayerIndex}:${edge.sourceNodeIndex}:${edge.targetNodeIndex}`;
 }
 
