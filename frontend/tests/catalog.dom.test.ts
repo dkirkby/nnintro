@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createCatalogIndex, type Selection } from "../src/model/catalog.js";
 import type { Activation, Manifest, ManifestEntry } from "../src/model/types.js";
 import { createSelector, describeArchitecture, type Selector } from "../src/view/selector.js";
-import { loadManifest } from "./fixtures.js";
+import { allCheckpoints, loadManifest } from "./fixtures.js";
 
 const MANIFEST = loadManifest();
 
@@ -27,6 +27,7 @@ function manifestOf(entries: [string, number[], Activation | null][]): Manifest 
     description: `the ${id}`,
     generatorVersion: 1,
     hasAnalyticTarget: true,
+    targetRange: [-1, 1] as [number, number],
     sampleCount: 4,
   }));
   const checkpoints: ManifestEntry[] = entries.map(([dataset, layerSizes, activation]) => ({
@@ -180,18 +181,29 @@ describe("the catalog controls", () => {
     expect(stops("width of hidden layer 1").find((stop) => stop.current)?.text).toBe("4");
   });
 
-  it("HIDES THE WIDTH OF A LAYER THAT DOES NOT EXIST, rather than greying it", () => {
-    // At depth 1 there is no second hidden layer, so there is no such thing
-    // as its width; a disabled control would imply there is.
-    expect(slider("width of hidden layer 2").closest(".selector-group")).toHaveProperty(
-      "hidden",
-      true,
-    );
+  it("DISABLES THE WIDTH OF A LAYER THAT DOES NOT EXIST, keeping its place", () => {
+    // Every control stays in the row at every depth. The depth slider is
+    // directly above these, so a row that reflowed on a depth change would
+    // move a control out from under the pointer that had just used it.
+    const group = slider("width of hidden layer 2").closest<HTMLElement>(".selector-group")!;
+    expect(group.hidden).toBe(false);
+    expect(slider("width of hidden layer 2").disabled).toBe(true);
+    expect(group.classList.contains("is-inert")).toBe(true);
+    // Greyed, but not struck through: the catalog has those widths, there
+    // is just no layer to apply them to yet.
+    expect(stops("width of hidden layer 2").some((stop) => stop.missing)).toBe(false);
+
     selector.sync({ dataset: "a-set", widths: [4, 2], activation: "relu" });
-    expect(slider("width of hidden layer 2").closest(".selector-group")).toHaveProperty(
-      "hidden",
-      false,
-    );
+    expect(slider("width of hidden layer 2").disabled).toBe(false);
+    expect(group.classList.contains("is-inert")).toBe(false);
+  });
+
+  it("previews what a new layer would get, rather than showing a blank", () => {
+    // Deepening inherits the last existing layer's width, so the disabled
+    // control reads 4 at 2–4–1: it is the next stop up, already shown.
+    expect(stops("width of hidden layer 2").find((stop) => stop.current)?.text).toBe("4");
+    selector.sync({ dataset: "a-set", widths: [2], activation: "relu" });
+    expect(stops("width of hidden layer 2").find((stop) => stop.current)?.text).toBe("2");
   });
 
   it("A NEW LAYER INHERITS THE LAST ONE's WIDTH: 2–4–1 deepens to 2–4–4–1", () => {
@@ -242,5 +254,44 @@ describe("the catalog controls", () => {
     drag("hidden layers", 0);
     expect(asked.map(describeArchitecture)).toEqual(["2–4–4–1", "2–1"]);
     expect(slider("hidden layers").disabled).toBe(false);
+  });
+});
+
+/**
+ * The colour scale's ends travel with the asset.
+ *
+ * `view/colormap.ts` paints a regression's output scale over
+ * `dataset.targetRange`, which the browser cannot work out for itself: it
+ * has each generator's formula but not a search over the domain. So the
+ * snapshot has to carry it, and a regression dataset that arrived without
+ * one would quietly fall back to the range its own samples happened to
+ * draw.
+ */
+describe("the published target ranges", () => {
+  it("DECLARES ONE PER REGRESSION DATASET, and none for a classifier", () => {
+    const declared = Object.fromEntries(
+      MANIFEST.datasets.map((entry) => [entry.id, entry.targetRange]),
+    );
+    // Both regression generators top out at |y| = 1 by construction, which
+    // is what puts full red and full blue at a round number.
+    expect(declared).toEqual({
+      "tilted-plane": [-0.6, 1],
+      "curved-surface": [-1, 1],
+      "gaussian-clusters": null,
+      "xor-quadrants": null,
+    });
+  });
+
+  it("agrees with every checkpoint, and holds every sample", () => {
+    for (const { dataset } of allCheckpoints()) {
+      const entry = MANIFEST.datasets.find((row) => row.id === dataset.id)!;
+      expect(dataset.targetRange).toEqual(entry.targetRange);
+      if (dataset.targetRange === null) continue;
+      const [lo, hi] = dataset.targetRange;
+      // A sample outside the range would saturate the very scale its own
+      // dataset defines.
+      expect(Math.min(...dataset.samples.y)).toBeGreaterThanOrEqual(lo);
+      expect(Math.max(...dataset.samples.y)).toBeLessThanOrEqual(hi);
+    }
   });
 });

@@ -66,7 +66,7 @@ export const OPENING_PROBE = 0.5;
  * (PLAN.md section 3).
  */
 const ANALYTIC_TARGETS: Record<string, (x: number[]) => number> = {
-  "tilted-plane": (x) => 0.6 * x[0] - 0.4 * x[1] + 0.2,
+  "tilted-plane": (x) => 0.5 * x[0] - 0.3 * x[1] + 0.2,
   "curved-surface": (x) => Math.sin(Math.PI * x[0]) * Math.cos(Math.PI * x[1]),
 };
 

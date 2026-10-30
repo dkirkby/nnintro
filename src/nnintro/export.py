@@ -69,6 +69,56 @@ def _input_sensitivity(model: DenseNet, x: torch.Tensor) -> torch.Tensor:
     return grad
 
 
+def _browser_pre(model: DenseNet, point: np.ndarray) -> list[list[float]]:
+    """Preactivations in the browser's own summation order.
+
+    `model.trace` sums a layer however torch's gemv happens to; the browser
+    (`frontend/src/model/evaluate.ts`) starts from the bias and adds the
+    weighted inputs in index order. The two differ in the last bit, which
+    matters nowhere -- except exactly on a kink, where it is the whole
+    difference between phi'(z) being 0 and being 1.
+    """
+    weights = [layer.weight.detach().numpy().tolist() for layer in model.layers]
+    biases = [layer.bias.detach().numpy().tolist() for layer in model.layers]
+    pre: list[list[float]] = []
+    activations = [float(value) for value in point]
+    for index, (W, b) in enumerate(zip(weights, biases)):
+        z = []
+        for row, unit_bias in zip(W, b):
+            total = float(unit_bias)
+            for w, a in zip(row, activations):
+                total += float(w) * float(a)
+            z.append(total)
+        pre.append(z)
+        # The output layer applies no nonlinearity; `_kink_point` only runs
+        # for ReLU, so that is the only hidden activation to mirror here.
+        activations = z if index == len(weights) - 1 else [max(0.0, v) for v in z]
+    return pre
+
+
+def _gates_agree(model: DenseNet, point: np.ndarray) -> bool:
+    """Whether both arithmetics make the same ReLU decision at every unit.
+
+    A kink point is only a fixture if the browser can reproduce the
+    sensitivity stored with it, and it cannot when the two disagree about
+    whether some *other* unit is on its kink or a fraction above it: one
+    reads phi'(0) = 0, the other phi'(z) = 1, and the sensitivities differ
+    in the first digit rather than the last.
+
+    This is a real case, not a hypothetical. The tilted plane's 2-4-1 ReLU
+    model has two first-layer units on the kink at the solved point; the
+    second is exactly zero in torch and +5.6e-17 in the browser's order.
+    """
+    ours = _browser_pre(model, point)
+    with torch.no_grad():
+        theirs = model.trace(torch.as_tensor(point, dtype=torch.float64)).pre[1:]
+    for mine, reference in zip(ours, theirs):
+        for value, other in zip(mine, reference.tolist()):
+            if (value > 0) != (other > 0) or (value == 0.0) != (other == 0.0):
+                return False
+    return True
+
+
 def _kink_point(model: DenseNet, domain) -> np.ndarray | None:
     """A point where one first-layer preactivation is exactly zero.
 
@@ -76,6 +126,12 @@ def _kink_point(model: DenseNet, domain) -> np.ndarray | None:
     (zero at z = 0) rather than hiding the discontinuity, so the fixture set
     pins that convention on a point that actually sits on the kink -- found
     exactly rather than by search, by solving w . x + b = 0 along x2.
+
+    A candidate is kept only if `_gates_agree`: being on the kink is not
+    enough if the browser and torch would then disagree about some other
+    unit. There is no "closest" fallback, because a point that nearly sits
+    on a kink pins nothing -- the probe exists to fix the convention AT
+    zero, so a checkpoint with no such point simply has no kink probe.
     """
     if model.activation != "relu":
         return None
@@ -92,7 +148,7 @@ def _kink_point(model: DenseNet, domain) -> np.ndarray | None:
                 point = np.array([x1, x2], dtype=np.float64)
                 # Confirm it is exactly zero in the arithmetic that matters.
                 z = float(weight[unit] @ point + bias[unit])
-                if z == 0.0:
+                if z == 0.0 and _gates_agree(model, point):
                     return point
     return None
 
@@ -279,6 +335,14 @@ def build_checkpoint(
             "inputNames": list(dataset.input_names),
             "targetName": dataset.target_name,
             "hasAnalyticTarget": dataset.has_analytic_target,
+            # The ends of the browser's output colour scale, where the
+            # generator defines them; null for a classifier, whose targets
+            # are class labels rather than values on the output axis.
+            "targetRange": (
+                list(dataset.target_range)
+                if dataset.target_range is not None
+                else None
+            ),
             # No preprocessing: the generators already emit the common
             # domain, so reported derivatives are in original input units
             # and need no chain-rule correction.
@@ -362,6 +426,7 @@ def build_manifest(payloads: list[dict]) -> dict:
                 "description": spec["description"],
                 "generatorVersion": spec["generatorVersion"],
                 "hasAnalyticTarget": spec["hasAnalyticTarget"],
+                "targetRange": spec["targetRange"],
                 "sampleCount": len(spec["samples"]["y"]),
             },
         )

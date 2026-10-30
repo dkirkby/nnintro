@@ -1,13 +1,17 @@
 {
- "schemaVersion": "0.2.0",
+ "schemaVersion": "0.3.0",
  "datasets": [
   {
    "id": "tilted-plane",
    "label": "Tilted plane",
    "task": "regression",
-   "description": "y = 0.6 x1 - 0.4 x2 + 0.2",
-   "generatorVersion": 1,
+   "description": "y = 0.5 x1 - 0.3 x2 + 0.2",
+   "generatorVersion": 2,
    "hasAnalyticTarget": true,
+   "targetRange": [
+    -0.6,
+    1.0
+   ],
    "sampleCount": 400
   },
   {
@@ -15,8 +19,12 @@
    "label": "Curved surface",
    "task": "regression",
    "description": "y = sin(pi x1) cos(pi x2)",
-   "generatorVersion": 1,
+   "generatorVersion": 2,
    "hasAnalyticTarget": true,
+   "targetRange": [
+    -1.0,
+    1.0
+   ],
    "sampleCount": 400
   },
   {
@@ -24,8 +32,9 @@
    "label": "Gaussian clusters",
    "task": "classification",
    "description": "two overlapping Gaussian clusters, one per class",
-   "generatorVersion": 1,
+   "generatorVersion": 2,
    "hasAnalyticTarget": false,
+   "targetRange": null,
    "sampleCount": 400
   },
   {
@@ -33,8 +42,9 @@
    "label": "XOR quadrants",
    "task": "classification",
    "description": "XOR quadrants: class 1 where the two inputs share a sign",
-   "generatorVersion": 1,
+   "generatorVersion": 2,
    "hasAnalyticTarget": false,
+   "targetRange": null,
    "sampleCount": 400
   }
  ],
@@ -49,7 +59,7 @@
    ],
    "hiddenActivation": null,
    "url": "tilted-plane__2-1__none.json",
-   "contentHash": "sha256:89b6e8fb7995bd63623cb5d011a7ec555a1264908560875410da3eef8f27f0b1",
+   "contentHash": "sha256:273ca28f2a4901dcd7e530c31ddbcf606b24060830a6de4c64b51c2fd060c312",
    "metrics": {
     "trainLoss": 0.0,
     "testLoss": 0.0
@@ -66,10 +76,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-2-1__relu.json",
-   "contentHash": "sha256:6c2aa5a266e887ecfbec96112518d17aa648a2c3cad4bdd2c1fb7147f76ac1d6",
+   "contentHash": "sha256:07841df6f24d5658a81fd59360a97d6033645dea8fcc40d0826848adad8d5ca3",
    "metrics": {
-    "trainLoss": 8.169554082847607e-33,
-    "testLoss": 8.676314399464497e-33
+    "trainLoss": 1.9740781929969167e-33,
+    "testLoss": 2.2822269840988744e-33
    }
   },
   {
@@ -83,10 +93,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "tilted-plane__2-2-1__tanh.json",
-   "contentHash": "sha256:c3dcbc511a31a038dbf7e65ffa0b9fbc29ee1f79103ff6bec1a855880c0469ab",
+   "contentHash": "sha256:01ad95728b6add0b98b501dcc372394c2db8450027a80675a6835d291d18a328",
    "metrics": {
-    "trainLoss": 6.84665997161139e-07,
-    "testLoss": 7.939239495091082e-07
+    "trainLoss": 5.857950186983107e-07,
+    "testLoss": 4.2892696101488047e-07
    }
   },
   {
@@ -100,10 +110,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "tilted-plane__2-2-1__identity.json",
-   "contentHash": "sha256:01cecdb8a99206bc94a1a2b7c540b125d75e9ffa5aaab2ed0178a4572b668842",
+   "contentHash": "sha256:d849cbed7f8419eee3789a9a098ec6aca37ad38785aa3b01ff8e0b4c5f13a71b",
    "metrics": {
-    "trainLoss": 3.396257086305366e-33,
-    "testLoss": 3.3896367021215354e-33
+    "trainLoss": 1.7733601816053094e-33,
+    "testLoss": 2.0070296506391672e-33
    }
   },
   {
@@ -117,10 +127,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-4-1__relu.json",
-   "contentHash": "sha256:3dd22c430ab6564e41b60d61b983865b214e2de20d904d92cac1ac979c364359",
+   "contentHash": "sha256:cc8827d089c89fd8fcf98c56dd53e09b0a80a10ef31efeaaeea1802466b196ef",
    "metrics": {
-    "trainLoss": 1.3865491893372857e-32,
-    "testLoss": 2.784894699583943e-32
+    "trainLoss": 5.488298488396001e-33,
+    "testLoss": 6.357976228908363e-33
    }
   },
   {
@@ -134,10 +144,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "tilted-plane__2-4-1__tanh.json",
-   "contentHash": "sha256:00c55d550036f244a13521229074165ca3049f39472a451d5ffd6d4355d97a9a",
+   "contentHash": "sha256:5e62ceb81cd8dd1c85934083458149c45a4fa17072f5da4c6812562ef7dc46c2",
    "metrics": {
-    "trainLoss": 8.448802444351423e-07,
-    "testLoss": 7.377955416174532e-07
+    "trainLoss": 4.570845822783627e-07,
+    "testLoss": 4.966883631966056e-07
    }
   },
   {
@@ -151,10 +161,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "tilted-plane__2-4-1__identity.json",
-   "contentHash": "sha256:8a510e3c26614a08cbe9bf1c5f32388f2a67ee861b443275cddcc3267e7a6f03",
+   "contentHash": "sha256:c3f8aa27a2db82fe23eac516b081edea8079069800dc22ff585353d8ebd4c39e",
    "metrics": {
-    "trainLoss": 3.26460171901327e-33,
-    "testLoss": 3.457044250175088e-33
+    "trainLoss": 1.3282898085195717e-33,
+    "testLoss": 1.9644485432749804e-33
    }
   },
   {
@@ -169,10 +179,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-2-2-1__relu.json",
-   "contentHash": "sha256:d0ddbe9675dc25915aa98eb090a1eaf2c884eaee7cd13a0efb621af09fe3e584",
+   "contentHash": "sha256:e30e29f9ed89e63a1b0a0f94cad99b8ab686c28b5a96fa6f4e401a0edbb78fb1",
    "metrics": {
-    "trainLoss": 7.714580698196432e-18,
-    "testLoss": 8.368466187616973e-08
+    "trainLoss": 2.0742994008126117e-27,
+    "testLoss": 2.1403900437110294e-28
    }
   },
   {
@@ -187,10 +197,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "tilted-plane__2-2-2-1__tanh.json",
-   "contentHash": "sha256:939f8c1ce6985956bf150a0c66fe5a42be85f09c93a1efe241d473141da5e90e",
+   "contentHash": "sha256:d860675cebd53b0abdc9a6faa9a44fbc19c35be0151f1d9eabefd7e2b697baa3",
    "metrics": {
-    "trainLoss": 1.3331467906396254e-06,
-    "testLoss": 1.3634465653860109e-06
+    "trainLoss": 8.784208382749936e-07,
+    "testLoss": 9.538523820070398e-07
    }
   },
   {
@@ -205,10 +215,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "tilted-plane__2-2-2-1__identity.json",
-   "contentHash": "sha256:1c04bbab8db2498c4e86485596d12a83c2e72d7192b1c4118c17b8412c231515",
+   "contentHash": "sha256:ece0e24bea1851455fef58bd00d8c6f9a949141f64267a7fa7268978f6107560",
    "metrics": {
-    "trainLoss": 3.5379934931501145e-33,
-    "testLoss": 3.790470871797128e-33
+    "trainLoss": 2.0613468936019634e-33,
+    "testLoss": 2.9683395267868272e-33
    }
   },
   {
@@ -223,10 +233,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-2-4-1__relu.json",
-   "contentHash": "sha256:846d5db90ef2f6a2fa26692f1b055fbecb1f12634b94422a508b30f9830ca357",
+   "contentHash": "sha256:91680e8e157e1845dd831fa763d1f853424e4cd7bea09433121708468ede31ce",
    "metrics": {
-    "trainLoss": 4.051740795829929e-09,
-    "testLoss": 4.060329817103458e-09
+    "trainLoss": 1.4146088328182628e-09,
+    "testLoss": 7.484784107441463e-11
    }
   },
   {
@@ -241,10 +251,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "tilted-plane__2-2-4-1__tanh.json",
-   "contentHash": "sha256:0d3a3381b03efac956de7a3c2961bd12f777308a2808cc788a580dcc419efb93",
+   "contentHash": "sha256:4d6dc392cc549699e1b6c52484ad98dae123001b664b242ce6c93f805e3a739a",
    "metrics": {
-    "trainLoss": 8.766452012027488e-07,
-    "testLoss": 8.504562845963159e-07
+    "trainLoss": 5.598271120297559e-07,
+    "testLoss": 4.431976565037376e-07
    }
   },
   {
@@ -259,10 +269,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "tilted-plane__2-2-4-1__identity.json",
-   "contentHash": "sha256:063aea52cba98a25cb5fc8454d2802fc7ea60f3e34821db73702163b02383ebf",
+   "contentHash": "sha256:24001a0619edaf181eec9d4aa6a80b4c2b6a82bdcb5771451359fe415b474ae1",
    "metrics": {
-    "trainLoss": 3.202460385651401e-33,
-    "testLoss": 2.0607450404943422e-33
+    "trainLoss": 2.1389859444850737e-33,
+    "testLoss": 3.209080769835232e-33
    }
   },
   {
@@ -277,10 +287,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-4-2-1__relu.json",
-   "contentHash": "sha256:3777fc901561865c5c9dee76a8c728b923f891c88f0846aea4519f0b01319fd1",
+   "contentHash": "sha256:785ebdec1a45482048a6ea3594824de982688868dd5bb22d6f9a9a887b02a713",
    "metrics": {
-    "trainLoss": 1.7751628063579738e-09,
-    "testLoss": 1.4209776006712248e-06
+    "trainLoss": 9.969989873348916e-11,
+    "testLoss": 2.3523580777821807e-06
    }
   },
   {
@@ -295,10 +305,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "tilted-plane__2-4-2-1__tanh.json",
-   "contentHash": "sha256:e170f778a71869a8fcea9009e10501c7669de8075988efb65b7dcff7d9233130",
+   "contentHash": "sha256:425855701aa58f4d7932bcc2a35c0136563c5fc7b6494334705a0cd5012c17f8",
    "metrics": {
-    "trainLoss": 1.8121877368679781e-06,
-    "testLoss": 1.8806758372767557e-06
+    "trainLoss": 8.782997441356819e-07,
+    "testLoss": 6.973574846333795e-07
    }
   },
   {
@@ -313,10 +323,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "tilted-plane__2-4-2-1__identity.json",
-   "contentHash": "sha256:5d84237440cfe15f4f2d0857919817ae7259a3632f78b99ce679640605b4325d",
+   "contentHash": "sha256:02daed34c8264b80e6a61ac5110bffbf9a75aa991a0744a2c2a815b2328cde40",
    "metrics": {
-    "trainLoss": 3.077876792373851e-33,
-    "testLoss": 6.211124070648836e-33
+    "trainLoss": 1.896890531944522e-33,
+    "testLoss": 1.2542618762821874e-33
    }
   },
   {
@@ -331,10 +341,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-4-4-1__relu.json",
-   "contentHash": "sha256:82a6f64b4bb0a5aca2e789d26dd3eb2a338c0f7d345c38a549c07202fd257885",
+   "contentHash": "sha256:36fb73286d5803d3599db748aedcfd1b690ed88b8ddc2316bb91516dcb6e2458",
    "metrics": {
-    "trainLoss": 5.093842350326595e-10,
-    "testLoss": 2.1518554863374296e-09
+    "trainLoss": 2.2946881995867226e-08,
+    "testLoss": 5.4676583974444957e-08
    }
   },
   {
@@ -349,10 +359,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "tilted-plane__2-4-4-1__tanh.json",
-   "contentHash": "sha256:d98c3616e6be7a3decb785f13712bd8eaadd8f12ba3a2e889bee8e92c922e77f",
+   "contentHash": "sha256:f719c947ef21020b54f09e7530afd93ab4ea64868bed0c179deba188f06205fd",
    "metrics": {
-    "trainLoss": 5.783639438801986e-07,
-    "testLoss": 5.368723360522267e-07
+    "trainLoss": 4.3392084686304437e-07,
+    "testLoss": 5.80057215276041e-07
    }
   },
   {
@@ -367,10 +377,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "tilted-plane__2-4-4-1__identity.json",
-   "contentHash": "sha256:b4db197951292ed7c7e543d3acf9be7d6c836d1f45361202d1475968d3b8e6d1",
+   "contentHash": "sha256:d6e92fa9972bf12972b9e1b5041b3f18460c2af19030919c7fdc78ddfb366969",
    "metrics": {
-    "trainLoss": 3.5039887925695275e-33,
-    "testLoss": 3.611118645726067e-33
+    "trainLoss": 1.8464853341812624e-33,
+    "testLoss": 3.5605629846859024e-33
    }
   },
   {
@@ -383,10 +393,10 @@
    ],
    "hiddenActivation": null,
    "url": "curved-surface__2-1__none.json",
-   "contentHash": "sha256:584c55fda83bd9678c84debadc9d0c761541e46ff67aa7b8c2ee19027ee6d4a9",
+   "contentHash": "sha256:5f750fa13eff0da05de776591e0011c6952ca75010ab0ca568d6c735f8b22e52",
    "metrics": {
-    "trainLoss": 0.26395536174666945,
-    "testLoss": 0.24258974733572716
+    "trainLoss": 0.2639553617466694,
+    "testLoss": 0.2425897473239867
    }
   },
   {
@@ -400,7 +410,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "curved-surface__2-2-1__relu.json",
-   "contentHash": "sha256:9d741cee4dc77642c9599738acc2b9be02aca584d15f6d2cf6390348f5ffb10e",
+   "contentHash": "sha256:d369a469a36d536afe9fa594123138cac16d1ce8ec5008766945bc1821f52d59",
    "metrics": {
     "trainLoss": 0.16361851488981585,
     "testLoss": 0.16874463715832216
@@ -417,7 +427,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "curved-surface__2-2-1__tanh.json",
-   "contentHash": "sha256:60ad0d21aedf36c56ed84169f084d7cdf23059ebb856ea56dbae63ecea879bf8",
+   "contentHash": "sha256:5a5195d3a47fbe2a2eb5c5e677d550038a106c10748d1897c12e6adc2bb9ac42",
    "metrics": {
     "trainLoss": 0.11016787524126279,
     "testLoss": 0.12222121023444577
@@ -434,10 +444,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "curved-surface__2-2-1__identity.json",
-   "contentHash": "sha256:23fd36bd06ffb2cb449ad178905192fa30cdef5b318beac179c4055f2e61d5c8",
+   "contentHash": "sha256:94721929835bc627d7ad229b5c882d10d0c8c41d71d0916b327dfa53407a6894",
    "metrics": {
-    "trainLoss": 0.26395536174666945,
-    "testLoss": 0.2425897473404059
+    "trainLoss": 0.2639553617466694,
+    "testLoss": 0.24258974734041255
    }
   },
   {
@@ -451,10 +461,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "curved-surface__2-4-1__relu.json",
-   "contentHash": "sha256:5040b81af38cae93be9960c5d60b7e6db892834bb3052eb10b6a50cf1a327502",
+   "contentHash": "sha256:c00fea3682b90f70b891b5a17284b0e95ab2a360b3d8f57e819ebf9c233eb31c",
    "metrics": {
-    "trainLoss": 0.0627428641103757,
-    "testLoss": 0.06727668813740198
+    "trainLoss": 0.052415877675921665,
+    "testLoss": 0.06651691092764622
    }
   },
   {
@@ -468,7 +478,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "curved-surface__2-4-1__tanh.json",
-   "contentHash": "sha256:f7f4422bbd3f6c42a173009d5ad95e7855bbc8f9a7e009b2242a483668c73eec",
+   "contentHash": "sha256:818fc90dc30dad45d19f23d74416203584667f1dfadb2c03d884c9e75d8ade72",
    "metrics": {
     "trainLoss": 0.007334947677416966,
     "testLoss": 0.01052233994597937
@@ -485,7 +495,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "curved-surface__2-4-1__identity.json",
-   "contentHash": "sha256:a45ad769a3aa449718a72c1f7cfe5ff133b741e350094f70ce1471a341b185c6",
+   "contentHash": "sha256:d1bd6bd15cec99b6616d97adaab1494fc598acdafbd0353df75ea9a274e5000c",
    "metrics": {
     "trainLoss": 0.2639553617466694,
     "testLoss": 0.24258974734041255
@@ -503,7 +513,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "curved-surface__2-2-2-1__relu.json",
-   "contentHash": "sha256:5431ed371d149a46e11ec86a0e4ccc924dec4c935a3e9a11551c1e23e4ead5e8",
+   "contentHash": "sha256:51f179f984ea8e940ae4f26e07e248de32e27f41a6339ca15274e7a51ce164a7",
    "metrics": {
     "trainLoss": 0.10667857885666163,
     "testLoss": 0.09838378600115452
@@ -521,10 +531,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "curved-surface__2-2-2-1__tanh.json",
-   "contentHash": "sha256:4281b9c82c8022bce67de403b025971a7b6a492536fc626655ad836128466369",
+   "contentHash": "sha256:d9f3ac7e31199cbe5168b3f81c76769e8b996b66a87cec945cb8548329b003a5",
    "metrics": {
-    "trainLoss": 0.04309980800063303,
-    "testLoss": 0.04615409547638539
+    "trainLoss": 0.04309447637150944,
+    "testLoss": 0.04625219126372215
    }
   },
   {
@@ -539,10 +549,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "curved-surface__2-2-2-1__identity.json",
-   "contentHash": "sha256:ddf3ffcd42e76d9022b2aed2034b21b5d32e767c567ecd090414fb1f64438e59",
+   "contentHash": "sha256:4f59af364a2efadf6b79b1a5bb32d5de24cad3721244c9ab6e20fa1a7aa4617f",
    "metrics": {
-    "trainLoss": 0.26395536174666945,
-    "testLoss": 0.24258974734041283
+    "trainLoss": 0.2639553617466694,
+    "testLoss": 0.24258974734231858
    }
   },
   {
@@ -557,7 +567,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "curved-surface__2-2-4-1__relu.json",
-   "contentHash": "sha256:7fce76847e8bc9b6b3ca45a6c7712a5e9b1b68c386ff1a41292520beb94984ee",
+   "contentHash": "sha256:625295697c5af7eef99fb67ca2ddd201944f1518c1c4e63db59e8a6089761a4e",
    "metrics": {
     "trainLoss": 0.03868654477857769,
     "testLoss": 0.04164658866010926
@@ -575,7 +585,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "curved-surface__2-2-4-1__tanh.json",
-   "contentHash": "sha256:606fe9ce8e9ffdc5387b2ccd8a6e1c5cedbc9c7af99dfb092424c147d0f97178",
+   "contentHash": "sha256:2b483ddf7893d33ea77cd73f90e6486f5f4ca37a0aa3b92446cabbaeb2a4df99",
    "metrics": {
     "trainLoss": 0.004290869502210059,
     "testLoss": 0.005535275257088865
@@ -593,7 +603,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "curved-surface__2-2-4-1__identity.json",
-   "contentHash": "sha256:dbd525a8ea9b0d890e51b3fbd3dbc9f74f524362338590e209e31b4f3cdc8fde",
+   "contentHash": "sha256:34086b8d2e667eb49213af9020d24d3db1af4a0d07ecd533be0e897ba91abe7b",
    "metrics": {
     "trainLoss": 0.26395536174666945,
     "testLoss": 0.24258974734043756
@@ -611,10 +621,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "curved-surface__2-4-2-1__relu.json",
-   "contentHash": "sha256:a293150a9dd0c8eb0ecf0545df0e5f4cc4e4d19e7a5ce0b63374e5cd7f3ed54e",
+   "contentHash": "sha256:03939adc684ea022d2201bff1821261b1e810d19636b4e8651dee87d2844fc08",
    "metrics": {
-    "trainLoss": 0.012823578168809585,
-    "testLoss": 0.01828572875456298
+    "trainLoss": 0.011236899290776566,
+    "testLoss": 0.016782794848664476
    }
   },
   {
@@ -629,10 +639,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "curved-surface__2-4-2-1__tanh.json",
-   "contentHash": "sha256:6bf24abb1960de9fa5265b4d3dbb0a08903d0501ed00539aab86ccd8318f0052",
+   "contentHash": "sha256:0ad550a773dcd7ec60da964cf02b64336bfb033fe21331ae5e8929e0ab39746b",
    "metrics": {
-    "trainLoss": 0.0017128328705626754,
-    "testLoss": 0.002498635835590219
+    "trainLoss": 0.0016113928804771063,
+    "testLoss": 0.002424986848774087
    }
   },
   {
@@ -647,7 +657,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "curved-surface__2-4-2-1__identity.json",
-   "contentHash": "sha256:18a82c33f2c66c09bddc4528a76a6991b998ca56f83d86e68ea1f02317f47268",
+   "contentHash": "sha256:bce013b7d1e04dbe46bc598fbe354a5c1811243a1da85e350f6ea06ce88b4ae2",
    "metrics": {
     "trainLoss": 0.26395536174666945,
     "testLoss": 0.24258974734048738
@@ -665,10 +675,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "curved-surface__2-4-4-1__relu.json",
-   "contentHash": "sha256:0a5987eae288c9b1ca3b93a4477d535e4a7b840a85c80724679854f89d8dbafd",
+   "contentHash": "sha256:bb9b2bc597311190d882f045b7299cdfd5c37eaa0283d75a6027d56281a4c631",
    "metrics": {
-    "trainLoss": 0.008583085592760062,
-    "testLoss": 0.014230695290342345
+    "trainLoss": 0.005921409898224731,
+    "testLoss": 0.006387546716757009
    }
   },
   {
@@ -683,7 +693,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "curved-surface__2-4-4-1__tanh.json",
-   "contentHash": "sha256:81bf764c7eaf82dc29c21bf5736808aee993c5e03feee3b0175bf354a46e9f61",
+   "contentHash": "sha256:d907d87410873a3d3e1f66f874e4631a9cacc901b75215258fb278fcc6a5c06d",
    "metrics": {
     "trainLoss": 0.00027455697275968716,
     "testLoss": 0.0004342524565161306
@@ -701,7 +711,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "curved-surface__2-4-4-1__identity.json",
-   "contentHash": "sha256:e756c48525242ea152e65ea0f367fe7f3fb53e408726ae0e4ba3ece58012e95e",
+   "contentHash": "sha256:cd4e6b6b01c9aa6037db1a638cd125ef588831a7906825cb1f457c490cc75680",
    "metrics": {
     "trainLoss": 0.26395536174666945,
     "testLoss": 0.24258974738516584
@@ -717,7 +727,7 @@
    ],
    "hiddenActivation": null,
    "url": "gaussian-clusters__2-1__none.json",
-   "contentHash": "sha256:89710d2d5f862bcf9cbbbf2809f50e9ecadd64ec7bb202a7ce84d36a0ae2e86a",
+   "contentHash": "sha256:eac2b7d9179e6b24b16feb4807c212751f9273548119d160d7ab32f4f4f483a8",
    "metrics": {
     "trainLoss": 0.14007934452527332,
     "testLoss": 0.12358836044152258
@@ -734,10 +744,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "gaussian-clusters__2-2-1__relu.json",
-   "contentHash": "sha256:089cc9bdbf52d05fc0bfe38e4ca47a1a594b4587e54ac51593d467a5f2ff4ad4",
+   "contentHash": "sha256:4d3d45c2ebb4f27e1eb2d8ea96e16586475c32c824e92f7ee728ef83ca271781",
    "metrics": {
-    "trainLoss": 0.12892502303693348,
-    "testLoss": 0.38896563378313215
+    "trainLoss": 0.11305412480468358,
+    "testLoss": 0.24994117325424625
    }
   },
   {
@@ -751,10 +761,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "gaussian-clusters__2-2-1__tanh.json",
-   "contentHash": "sha256:8efad73c21d43d4b45f8a6ca90c9d8cbf847094866e76ce02d24319f25f27cee",
+   "contentHash": "sha256:6b6e5687eca109a62f21e11064ac8ac6ce5db7c2173e5798a2fc93f7d81b8807",
    "metrics": {
-    "trainLoss": 0.11847631234237262,
-    "testLoss": 0.2864186390658038
+    "trainLoss": 0.11824320207675994,
+    "testLoss": 0.28993399961750443
    }
   },
   {
@@ -768,7 +778,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "gaussian-clusters__2-2-1__identity.json",
-   "contentHash": "sha256:41636e5e51819b4f54b42814f2e1bb8292c5fe638555ce0d0ffb0036cb85ae42",
+   "contentHash": "sha256:9305456ad7a952b9f1f095673076458ddd91393594099d2a159c9db02033eae4",
    "metrics": {
     "trainLoss": 0.14007934452527332,
     "testLoss": 0.12358836044362091
@@ -785,7 +795,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "gaussian-clusters__2-4-1__relu.json",
-   "contentHash": "sha256:f111176f2dafb921363da6c2eb74b141933fdb2d8297347d812bca00647a1421",
+   "contentHash": "sha256:3af79e72ec15d2b96dc7c5c16cbc08cbc578aec7c614527566f9bff336d83f95",
    "metrics": {
     "trainLoss": 0.09050636663366936,
     "testLoss": 0.3838255667656047
@@ -802,10 +812,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "gaussian-clusters__2-4-1__tanh.json",
-   "contentHash": "sha256:bf80f9ce7463e0af8266af8cbd55d6f643486e55d290ef327ce81e8f72b00b7c",
+   "contentHash": "sha256:ff101fdbdb0a7823abbcc8625ebc0c2c4f5a74af95feb74cd00c429d98079705",
    "metrics": {
-    "trainLoss": 0.0977133454505407,
-    "testLoss": 0.23038315722186517
+    "trainLoss": 0.09326212947622832,
+    "testLoss": 0.22508470259880636
    }
   },
   {
@@ -819,7 +829,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "gaussian-clusters__2-4-1__identity.json",
-   "contentHash": "sha256:797a8f2626a6f46941110bd75391a66e80089dc49ba84c7cd5fdee95baaea0a5",
+   "contentHash": "sha256:156c8bc257704650ecd073c57bf4e10693bc8db895247fe54814869470dc54e7",
    "metrics": {
     "trainLoss": 0.14007934452527332,
     "testLoss": 0.12358836045140001
@@ -837,7 +847,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "gaussian-clusters__2-2-2-1__relu.json",
-   "contentHash": "sha256:cb9569c901f924626e79fd210b4bad2022714c3e0c30969fc622fff0e5466b12",
+   "contentHash": "sha256:bda530f587b9cc75737374d28e41be1922036d314ac26880707253d21c43c8b9",
    "metrics": {
     "trainLoss": 0.10640684342684689,
     "testLoss": 0.23786718346903868
@@ -855,7 +865,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "gaussian-clusters__2-2-2-1__tanh.json",
-   "contentHash": "sha256:fd1d3071bab9df938b293f0c490fad1fe148c6da994122c31bd7186e487fd458",
+   "contentHash": "sha256:cec052d2ce61b8acd75d2df63e90ab1384292b1ab1919f8e57f3b258f7a69f2d",
    "metrics": {
     "trainLoss": 0.09770347473244582,
     "testLoss": 0.39020404082376203
@@ -873,7 +883,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "gaussian-clusters__2-2-2-1__identity.json",
-   "contentHash": "sha256:0a68f1de8ce0f93dee8484b2c4fb7141525004b88cc4a04435a06604caad8da3",
+   "contentHash": "sha256:1323a5567043fd02dfd35412c60eff80a42f8162c7709d2faf8771a1953d8450",
    "metrics": {
     "trainLoss": 0.14007934452527332,
     "testLoss": 0.12358836044152961
@@ -891,10 +901,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "gaussian-clusters__2-2-4-1__relu.json",
-   "contentHash": "sha256:2520461f5830c1666a5969ed258ff0958d486c226bc77716958ae293a48bb4ae",
+   "contentHash": "sha256:036a2cdda27eecf1c53084144024422b4bc00f424c78de93abe4e9b003c48b01",
    "metrics": {
-    "trainLoss": 0.11421602980274673,
-    "testLoss": 0.1027544812512788
+    "trainLoss": 0.08437665349173597,
+    "testLoss": 0.4523939381270865
    }
   },
   {
@@ -909,10 +919,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "gaussian-clusters__2-2-4-1__tanh.json",
-   "contentHash": "sha256:221daa652b8d4a5b6d9cdcd3d29bcaa8aac3bb4d718dfc96fe611246b7dec1c1",
+   "contentHash": "sha256:a3065fc6fe412111310a5f0352358a591d2a701b154b65da2d3e407ad344fddf",
    "metrics": {
-    "trainLoss": 0.07906605368037399,
-    "testLoss": 0.36096404062511356
+    "trainLoss": 0.07475581047249327,
+    "testLoss": 0.5074990244175852
    }
   },
   {
@@ -927,7 +937,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "gaussian-clusters__2-2-4-1__identity.json",
-   "contentHash": "sha256:58987a49e00f6cd4719706b1d048d2c96312e7163f9be2175b323bfde0abae50",
+   "contentHash": "sha256:418f64a383f2ee0e5bbc805647d43ad1c1caad0dc3dd9c1620e89fc30ecf1fa7",
    "metrics": {
     "trainLoss": 0.14007934452527332,
     "testLoss": 0.12358836044156134
@@ -945,7 +955,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "gaussian-clusters__2-4-2-1__relu.json",
-   "contentHash": "sha256:167a7f63c893bee4fd99a693ad95cec81c0a9848172b3711d3341222b57e3185",
+   "contentHash": "sha256:c0edc0926bf11aadc5efd4afc1dfbd4b3a33665a04303f08ae17f8209257fcb5",
    "metrics": {
     "trainLoss": 0.07823945629015303,
     "testLoss": 1.5493189598421193
@@ -963,10 +973,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "gaussian-clusters__2-4-2-1__tanh.json",
-   "contentHash": "sha256:ca0be6549a3b62be780518a681b61ec49c4538d1225555b97683ac696f4d2f47",
+   "contentHash": "sha256:2f0f338b17369f96ee6611d4dbda5c1246dd98c84092bd17dd491a01b0eeb724",
    "metrics": {
-    "trainLoss": 0.070323176735574,
-    "testLoss": 0.4652192366879948
+    "trainLoss": 0.0664944755765979,
+    "testLoss": 0.3377649069948204
    }
   },
   {
@@ -981,7 +991,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "gaussian-clusters__2-4-2-1__identity.json",
-   "contentHash": "sha256:a74152bbbcbffaa0596003c623e85984773af7fc90d2deb2b93bc195457d6670",
+   "contentHash": "sha256:99229949e6aef18e64ace782b36f963e50aebb605e203854be9b941a85459f48",
    "metrics": {
     "trainLoss": 0.14007934452527332,
     "testLoss": 0.12358836044152252
@@ -999,10 +1009,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "gaussian-clusters__2-4-4-1__relu.json",
-   "contentHash": "sha256:ca426ad0ddad2de0be616fde5afc0b8db07607c7a3ed581508522e9c9b56300e",
+   "contentHash": "sha256:bce0c060b51d26ae750d3f859250ef2af0de7c09ff308f121f4fb967bda0ee0c",
    "metrics": {
-    "trainLoss": 0.07697875934275115,
-    "testLoss": 1.2298752295602084
+    "trainLoss": 0.07606891134233278,
+    "testLoss": 0.41650370144565024
    }
   },
   {
@@ -1017,7 +1027,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "gaussian-clusters__2-4-4-1__tanh.json",
-   "contentHash": "sha256:d879d8989012857a46def2c74d1bcc96c667a107cfeac7222b4ba06de9e829ca",
+   "contentHash": "sha256:23098139d050657ea79be9e848d52709b0182c3ec61cdf4a9b8e792b2efd2516",
    "metrics": {
     "trainLoss": 0.04663079891821388,
     "testLoss": 0.3807563733693749
@@ -1035,7 +1045,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "gaussian-clusters__2-4-4-1__identity.json",
-   "contentHash": "sha256:ca43ca558efe6477a9d805b7539e8c4ae833bfdc063fa5a3b4c0e2e52ed91158",
+   "contentHash": "sha256:13e081ea7fde0e85164a97a30d9a3398ebf46d8f2d2550cf67be4e9dfa7db071",
    "metrics": {
     "trainLoss": 0.1400793445252733,
     "testLoss": 0.12358836044005342
@@ -1051,10 +1061,10 @@
    ],
    "hiddenActivation": null,
    "url": "xor-quadrants__2-1__none.json",
-   "contentHash": "sha256:bc08742ca2e303ef8aa43cda15c837b53674d80a358a7329a3da64a556772076",
+   "contentHash": "sha256:0f4fc4324140ae08d9e5ff1c9b28166e2fa480ff75e43882ae4eff5ed8376abd",
    "metrics": {
-    "trainLoss": 0.6926920038430333,
-    "testLoss": 0.6943566188045192
+    "trainLoss": 0.6926920038430332,
+    "testLoss": 0.6943566188073957
    }
   },
   {
@@ -1068,10 +1078,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "xor-quadrants__2-2-1__relu.json",
-   "contentHash": "sha256:bb3179510d31abb4853cd73dae32923e7d265ce749ea2fe1789d50c176466d85",
+   "contentHash": "sha256:98f72bb5cfda9978f72f760b2c6c757881ce3f920f9b6acb7985b316a8509669",
    "metrics": {
-    "trainLoss": 0.35528367446221143,
-    "testLoss": 0.342700016891777
+    "trainLoss": 0.3552830572003651,
+    "testLoss": 0.3421657595441035
    }
   },
   {
@@ -1085,10 +1095,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "xor-quadrants__2-2-1__tanh.json",
-   "contentHash": "sha256:e3c399a075397727fe470dc90a50d0e8a6179d92ad34833b89693b4ec4ab6f5c",
+   "contentHash": "sha256:922f97328d6c260fcfc4aca2ce4596bfaeda6e2372432b41d2275c1368e2b856",
    "metrics": {
-    "trainLoss": 0.3541920531670817,
-    "testLoss": 0.3387803322021303
+    "trainLoss": 0.3541920531669488,
+    "testLoss": 0.3387801714751416
    }
   },
   {
@@ -1102,7 +1112,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "xor-quadrants__2-2-1__identity.json",
-   "contentHash": "sha256:f388305f5b32bd6ce36b3950e0004570ce624cd8f2bd737a436b1b62f42673c0",
+   "contentHash": "sha256:20442314c64c3d9125c257278924a372bd3e6b8608b60bed40ab8943d0352903",
    "metrics": {
     "trainLoss": 0.6926920038430333,
     "testLoss": 0.6943566188036989
@@ -1119,7 +1129,7 @@
    ],
    "hiddenActivation": "relu",
    "url": "xor-quadrants__2-4-1__relu.json",
-   "contentHash": "sha256:bdb6cbd7b36bf9325a66f421053d457ff09e8bf313c0fd598cea70f3336bdf2a",
+   "contentHash": "sha256:70af95f8cc32f5363c46f054f1d73b8f25a539c3904a367c5ad5d456f2326f96",
    "metrics": {
     "trainLoss": 0.23112122306191188,
     "testLoss": 0.22751887980812446
@@ -1136,10 +1146,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "xor-quadrants__2-4-1__tanh.json",
-   "contentHash": "sha256:22a167ed7c0e7d646ea93b172769118bb1486d2f3cf4d3415b3b14ef1b88a095",
+   "contentHash": "sha256:5d659bab4b5a93dee72ab20a9cb5cde7d4db96d8b3c8f017f005a95264894674",
    "metrics": {
-    "trainLoss": 0.223662272812812,
-    "testLoss": 0.19957246512799362
+    "trainLoss": 0.22242556788890927,
+    "testLoss": 0.19822425124358098
    }
   },
   {
@@ -1153,10 +1163,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "xor-quadrants__2-4-1__identity.json",
-   "contentHash": "sha256:823e80cbe7f63441f84e28855234dee462220951f1c2eea68ce848e297c3b58e",
+   "contentHash": "sha256:e432bb58630dfe9a511e2076be5c668917ad316acf5bac2aa62dced44efa39bf",
    "metrics": {
-    "trainLoss": 0.6926920038430333,
-    "testLoss": 0.6943566188332204
+    "trainLoss": 0.6926920038430332,
+    "testLoss": 0.694356618803831
    }
   },
   {
@@ -1171,10 +1181,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "xor-quadrants__2-2-2-1__relu.json",
-   "contentHash": "sha256:107aba5219babee5bca53fbef5ab0e8a92ad0a1b9b2d92da028c67fd99d54c22",
+   "contentHash": "sha256:634b32d7565d0d5411bbbfd2f22bca3a55f84f30521c6bcd5189c08d86a2bdc6",
    "metrics": {
-    "trainLoss": 0.2772515752978059,
-    "testLoss": 0.21343393565398858
+    "trainLoss": 0.27723581767158656,
+    "testLoss": 0.2133842201462552
    }
   },
   {
@@ -1189,7 +1199,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "xor-quadrants__2-2-2-1__tanh.json",
-   "contentHash": "sha256:6a7f4e159cc6fc8c22c0e22609a5b91d04e214cd3b52822e45696aa888a0b06b",
+   "contentHash": "sha256:31dd6a29315a511d6187efc9c1d3e029ade1e0f7872bb89d909437f19e862f04",
    "metrics": {
     "trainLoss": 0.24340851298904848,
     "testLoss": 0.2863969212947392
@@ -1207,7 +1217,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "xor-quadrants__2-2-2-1__identity.json",
-   "contentHash": "sha256:4ac77e789ce2c30d4596c45dfd714e3608a59c8544b35e2fb46fb4168c2bdc51",
+   "contentHash": "sha256:db05760b921f2da978fd4a61c1edcc9c1b3e74b5285cba00f751b384fd202b69",
    "metrics": {
     "trainLoss": 0.6926920038430332,
     "testLoss": 0.694356618803831
@@ -1225,10 +1235,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "xor-quadrants__2-2-4-1__relu.json",
-   "contentHash": "sha256:05bb2f2ab0eef98b13bcd330a1ea3eef1efb5d3c38d608170bdb670a0ff1e7ce",
+   "contentHash": "sha256:6119930d5077b38fd157458c763f64c506a9e85134f0252dd90b79503e334eb9",
    "metrics": {
-    "trainLoss": 0.2341013132829965,
-    "testLoss": 0.20087775361443136
+    "trainLoss": 0.23109904848620094,
+    "testLoss": 0.1997893666784965
    }
   },
   {
@@ -1243,7 +1253,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "xor-quadrants__2-2-4-1__tanh.json",
-   "contentHash": "sha256:8b200053925084c5fe952c976284e514c62790abd7e781a6f233eedbe744f11b",
+   "contentHash": "sha256:184954e4622b7f1372d635c7c0d2d1cf31260a1bf7b8da1a7b61180802610979",
    "metrics": {
     "trainLoss": 0.19167576683579474,
     "testLoss": 0.2384256207836914
@@ -1261,7 +1271,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "xor-quadrants__2-2-4-1__identity.json",
-   "contentHash": "sha256:b091aaf351065d14f51af1c43b8d404573f0c847737a3dae5d7041b8b9c2f867",
+   "contentHash": "sha256:cf0be266faac6b193d89dd04f050b150644a287434ce622186c81d2eac495352",
    "metrics": {
     "trainLoss": 0.6926920038430332,
     "testLoss": 0.694356618803831
@@ -1279,10 +1289,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "xor-quadrants__2-4-2-1__relu.json",
-   "contentHash": "sha256:dca3850310ebaba4d5c1909894688f5d7f28a9a211dfb417903e261a9e76701d",
+   "contentHash": "sha256:9b1c974c123b6f6a2f15b499b4a4b7f8d773f4810c9c8997f6f7428cf2f05e4c",
    "metrics": {
-    "trainLoss": 0.20794212217342736,
-    "testLoss": 0.2431526529268196
+    "trainLoss": 0.20490137387637958,
+    "testLoss": 0.34560613465256385
    }
   },
   {
@@ -1297,7 +1307,7 @@
    ],
    "hiddenActivation": "tanh",
    "url": "xor-quadrants__2-4-2-1__tanh.json",
-   "contentHash": "sha256:d87cba60dfb7180424f408b6fbcc37b8f52740e4c8bebaa4e1951aee939a95b9",
+   "contentHash": "sha256:fcdb3e865dd0664af0959987ef980e6a6d2dce3a20faab2dd120e5da07512ae5",
    "metrics": {
     "trainLoss": 0.17496258216376165,
     "testLoss": 0.4747245401573645
@@ -1315,10 +1325,10 @@
    ],
    "hiddenActivation": "identity",
    "url": "xor-quadrants__2-4-2-1__identity.json",
-   "contentHash": "sha256:db6435d8fe0652f61167b9be2b9f60940044970ff71a20e00a26c6b2bbfbe7dd",
+   "contentHash": "sha256:baf1b36db6c1cc06feeee8bb9f340de5a0c370ea43d80e1f0014566c9cc02d63",
    "metrics": {
-    "trainLoss": 0.6926920038430333,
-    "testLoss": 0.6943566188037888
+    "trainLoss": 0.6926920038430332,
+    "testLoss": 0.694356618803831
    }
   },
   {
@@ -1333,10 +1343,10 @@
    ],
    "hiddenActivation": "relu",
    "url": "xor-quadrants__2-4-4-1__relu.json",
-   "contentHash": "sha256:cc6ae1bc29718a655287a32640309131328dca10e4cef61819eb4b6546f43c7b",
+   "contentHash": "sha256:da1c3c1b60f3bb413dd6d73876f949a755dd5e58ba952cf168924c94eb6d5db8",
    "metrics": {
-    "trainLoss": 0.19284045461889715,
-    "testLoss": 0.1922747474039966
+    "trainLoss": 0.18451592268712616,
+    "testLoss": 0.30589224008916804
    }
   },
   {
@@ -1351,10 +1361,10 @@
    ],
    "hiddenActivation": "tanh",
    "url": "xor-quadrants__2-4-4-1__tanh.json",
-   "contentHash": "sha256:023304ccd2bd2b9df58701e44ee87f66ab28ebee26a0f2adb03e84b01ab68176",
+   "contentHash": "sha256:f9e63d5fa302ebd8250ad22e43ef16614cb437b8f034f6b3a05535e291003dfc",
    "metrics": {
-    "trainLoss": 0.13331221162249968,
-    "testLoss": 0.43881353074724166
+    "trainLoss": 0.12886320998455672,
+    "testLoss": 0.15052908727841496
    }
   },
   {
@@ -1369,7 +1379,7 @@
    ],
    "hiddenActivation": "identity",
    "url": "xor-quadrants__2-4-4-1__identity.json",
-   "contentHash": "sha256:f223a9fb40525ed27861e0d0f264315b62045c817ac551a6a2e1267b95a35ce4",
+   "contentHash": "sha256:cef12dd2370f8c8ced207b444d83df8d3777bab238e985adf1d32ff8050ecd2a",
    "metrics": {
     "trainLoss": 0.6926920038430333,
     "testLoss": 0.6943566186444083

@@ -15,7 +15,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-GENERATOR_VERSION = 1
+# Bumped to 2 when the tilted plane's coefficients changed from
+# 0.6/-0.4/+0.2 to 0.5/-0.3/+0.2, so its targets span exactly [-0.6, +1.0]:
+# see `tilted_plane`. A published checkpoint carries this, so a stale asset
+# is identifiable rather than silently mixed with a current one.
+GENERATOR_VERSION = 2
 
 # The fraction of samples assigned to the held-out split.
 TEST_FRACTION = 0.2
@@ -41,6 +45,18 @@ class Dataset:
     # True when the generator defines a target at every point of the domain,
     # so a freely dragged probe can be given a target and a point loss.
     has_analytic_target: bool
+    # The exact range of the generator's targets over the whole domain, which
+    # is what the browser's output colour scale spans. Declared here rather
+    # than measured from the draw, for two reasons: the range over a domain is
+    # a property of the formula, which lives in this module; and the sampled
+    # extremes fall short of it, since 400 uniform draws do not land on the
+    # corner where the tilted plane peaks, so a scale fitted to the sample
+    # would depend on the seed and never quite reach full red or blue.
+    # `tests/test_datasets.py` checks every declaration against a dense grid.
+    # None for a classifier, whose targets are class labels rather than values
+    # on the output axis -- there the scale has nothing to take its ends from
+    # and the browser uses the surface's own extent instead.
+    target_range: tuple[float, float] | None
     generator_version: int = GENERATOR_VERSION
 
     @property
@@ -61,15 +77,22 @@ def _split(n: int, rng: np.random.Generator) -> np.ndarray:
 
 
 def tilted_plane(num_samples: int = 400, seed: int = 20261027) -> Dataset:
-    """y = 0.6 x1 - 0.4 x2 + 0.2, sampled uniformly on [-1, 1]^2.
+    """y = 0.5 x1 - 0.3 x2 + 0.2, sampled uniformly on [-1, 1]^2.
 
     The teaching purpose is that every weight and the bias have an
     immediately interpretable role: a trained model's parameters can be read
     straight off against the generating coefficients.
+
+    The coefficients also sum so that the target's range over the domain is
+    exactly [-0.6, +1.0]: |y| reaches 1 at the corner (+1, -1) and nowhere
+    exceeds it. The browser's output colour scale spans `target_range`, so
+    this makes full red and full blue mean "the most extreme target there
+    is", on a scale whose ends are round numbers. Keep that property if
+    these numbers are ever changed: |a| + |b| + |c| should be 1.
     """
     rng = np.random.default_rng(seed)
     x = rng.uniform(-1.0, 1.0, size=(num_samples, 2))
-    y = 0.6 * x[:, 0] - 0.4 * x[:, 1] + 0.2
+    y = 0.5 * x[:, 0] - 0.3 * x[:, 1] + 0.2
     return Dataset(
         id="tilted-plane",
         label="Tilted plane",
@@ -80,8 +103,10 @@ def tilted_plane(num_samples: int = 400, seed: int = 20261027) -> Dataset:
         domain=((-1.0, 1.0), (-1.0, 1.0)),
         input_names=("x1", "x2"),
         target_name="y",
-        description="y = 0.6 x1 - 0.4 x2 + 0.2",
+        description="y = 0.5 x1 - 0.3 x2 + 0.2",
         has_analytic_target=True,
+        # At the corners (-1, +1) and (+1, -1), by construction above.
+        target_range=(-0.6, 1.0),
     )
 
 
@@ -138,6 +163,10 @@ def curved_surface(num_samples: int = 400, seed: int = 20261028) -> Dataset:
         target_name="y",
         description="y = sin(pi x1) cos(pi x2)",
         has_analytic_target=True,
+        # Each factor reaches +-1 inside the domain, and they do so
+        # independently: sin(pi x1) = +-1 at x1 = +-0.5 and cos(pi x2) = +-1
+        # at x2 = 0 or +-1.
+        target_range=(-1.0, 1.0),
     )
 
 
@@ -171,6 +200,7 @@ def gaussian_clusters(num_samples: int = 400, seed: int = 20261029) -> Dataset:
         target_name="class",
         description="two overlapping Gaussian clusters, one per class",
         has_analytic_target=False,
+        target_range=None,
     )
 
 
@@ -206,13 +236,14 @@ def xor_quadrants(num_samples: int = 400, seed: int = 20261030) -> Dataset:
         target_name="class",
         description="XOR quadrants: class 1 where the two inputs share a sign",
         has_analytic_target=False,
+        target_range=None,
     )
 
 
 def analytic_target(dataset_id: str, x: np.ndarray) -> np.ndarray:
     """The generator's target at arbitrary points, for free probes."""
     if dataset_id == "tilted-plane":
-        return 0.6 * x[..., 0] - 0.4 * x[..., 1] + 0.2
+        return 0.5 * x[..., 0] - 0.3 * x[..., 1] + 0.2
     if dataset_id == "curved-surface":
         return np.sin(np.pi * x[..., 0]) * np.cos(np.pi * x[..., 1])
     # The classification datasets are stochastic in x given the class, so an

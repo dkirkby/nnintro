@@ -1,12 +1,12 @@
 {
- "schemaVersion": "0.2.0",
+ "schemaVersion": "0.3.0",
  "checkpointId": "curved-surface__2-4-1__identity",
  "dataset": {
   "id": "curved-surface",
   "label": "Curved surface",
   "task": "regression",
   "description": "y = sin(pi x1) cos(pi x2)",
-  "generatorVersion": 1,
+  "generatorVersion": 2,
   "domain": [
    [
     -1.0,
@@ -23,6 +23,10 @@
   ],
   "targetName": "y",
   "hasAnalyticTarget": true,
+  "targetRange": [
+   -1.0,
+   1.0
+  ],
   "preprocessing": null,
   "samples": {
    "x": [
@@ -2570,15 +2574,15 @@
     0.95
    ]
   },
-  "attempts": 96,
+  "attempts": 256,
   "bestTrainLossOverall": 0.2639553617466694,
   "bestTrainLossAccepted": 0.2639553617466694,
-  "accepted_count": 52,
-  "rejected_count": 44,
+  "accepted_count": 139,
+  "rejected_count": 117,
   "diverged_count": 0,
   "rejected_by": {
-   "noVestigialUnits": 43,
-   "noDeadUnits": 4
+   "noVestigialUnits": 115,
+   "noDeadUnits": 11
   },
   "chosen_init_seed": 56
  },
@@ -3020,5 +3024,5 @@
    "pointLoss": 0.05213447749795472
   }
  ],
- "contentHash": "sha256:a45ad769a3aa449718a72c1f7cfe5ff133b741e350094f70ce1471a341b185c6"
+ "contentHash": "sha256:d1bd6bd15cec99b6616d97adaab1494fc598acdafbd0353df75ea9a274e5000c"
 }

@@ -11,6 +11,11 @@
  * The slots are light dots, not numbers. This panel answers "how many
  * parameters are there, and how are they arranged" — the values themselves
  * are everywhere else in the explorer.
+ *
+ * Every group shares the same two bands, so the gutter on the left names
+ * them once — "bias" above, "weight" below — rather than repeating a pair
+ * of labels per layer. Each rectangle names itself in full on hover,
+ * anywhere inside it.
  */
 
 import type { LayerParameters } from "../model/types.js";
@@ -27,6 +32,15 @@ const GAP = 8;
 const GROUP_GAP = 26;
 /** The caption strip under every group. */
 const LABEL = 16;
+/**
+ * The gutter down the left side holding the two row labels.
+ *
+ * Every group puts its bias strip on the same band and its weight block on
+ * the one below, so the two rows are named once on the left rather than per
+ * group. The labels are rotated because a horizontal "weight" would need a
+ * gutter wider than most of the diagram it labels.
+ */
+const AXIS = 15;
 
 export interface TensorsView {
   render(snapshot: Snapshot): void;
@@ -46,7 +60,7 @@ export function createTensorsView(options: { container: HTMLElement }): TensorsV
     const top = CELL + GAP;
     const height = top + tallest * CELL + LABEL;
 
-    let x = 0;
+    let x = AXIS;
     layers.forEach((layer, index) => {
       const columns = layer.b.length;
       const rows = rowsOf(layer);
@@ -85,7 +99,13 @@ export function createTensorsView(options: { container: HTMLElement }): TensorsV
       x += width + GROUP_GAP;
     });
 
-    const width = Math.max(x - GROUP_GAP, CELL);
+    // Named once for the whole diagram, on the bands every group shares.
+    marks.push(
+      rowLabel("bias", CELL / 2),
+      rowLabel("weight", top + (tallest * CELL) / 2),
+    );
+
+    const width = Math.max(x - GROUP_GAP, AXIS + CELL);
     svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     // Natural size: a schematic of a dozen slots blown up to the panel's
     // width would read as a chart of something.
@@ -130,11 +150,20 @@ function block(
   group.setAttribute("class", "tensor-block");
   group.dataset.label = label;
 
+  // First child, and the accessible name of the group: the frame and the
+  // dots inside it all resolve their tooltip to this one.
+  const title = document.createElementNS(SVG, "title");
+  title.textContent = label;
+  group.append(title);
+
   const frame = document.createElementNS(SVG, "rect");
   frame.setAttribute("x", String(x));
   frame.setAttribute("y", String(y));
   frame.setAttribute("width", String(width));
   frame.setAttribute("height", String(height));
+  // The frame is unfilled, and an unfilled shape is not hit-tested, so
+  // `.tensor-frame` sets `pointer-events: all`: the tooltip answers a hover
+  // anywhere inside the rectangle, not only over the slots themselves.
   frame.setAttribute("class", "tensor-frame");
   group.append(frame);
 
@@ -149,11 +178,26 @@ function block(
     }
   }
 
-  // An SVG <title> is the tooltip, and the accessible name of the group.
-  const title = document.createElementNS(SVG, "title");
-  title.textContent = label;
-  group.append(title);
   return group;
+}
+
+/**
+ * One of the two row names, in the left gutter and rotated a quarter turn.
+ *
+ * Rotated -90 degrees the glyphs run upward and sit to the LEFT of the
+ * baseline, so the baseline goes at the right edge of the gutter and the
+ * text fills it leftward.
+ */
+function rowLabel(text: string, centre: number): SVGElement {
+  const node = document.createElementNS(SVG, "text");
+  const x = AXIS - 4;
+  node.setAttribute("x", String(x));
+  node.setAttribute("y", centre.toFixed(2));
+  node.setAttribute("text-anchor", "middle");
+  node.setAttribute("transform", `rotate(-90 ${x} ${centre.toFixed(2)})`);
+  node.setAttribute("class", "tensor-axis");
+  node.textContent = text;
+  return node;
 }
 
 /** The background behind the selected unit's own slots. */

@@ -22,7 +22,7 @@ import {
   type UnitRef,
 } from "../src/model/types.js";
 import { edgeParameter, edgeUnit, nodeUnit } from "../src/view/adapter.js";
-import { createColorScale, niceLimit, type Palette } from "../src/view/colormap.js";
+import { createColorScale, niceLimit, outputLimit, type Palette } from "../src/view/colormap.js";
 import { createInputOutputView, type InputOutputView } from "../src/view/inputoutput.js";
 import { createHelp, type Help } from "../src/view/help.js";
 import { createInspector, type Inspector } from "../src/view/inspector.js";
@@ -45,10 +45,11 @@ const PALETTE: Palette = {
     ),
     "param",
   ),
-  output: createColorScale(
-    niceLimit([SURFACE.extent], CHECKPOINT.dataset.samples.y),
-    "output",
-  ),
+  // The generator's own range of targets, which is what `main.ts` fits a
+  // regression's output scale to: a property of the dataset alone, so an
+  // edit cannot move it and the colour under the probe means the same
+  // number either side of one.
+  output: createColorScale(outputLimit(CHECKPOINT.dataset, SURFACE.extent), "output"),
 };
 
 describe("the network view", () => {
@@ -71,7 +72,7 @@ describe("the network view", () => {
         if (unit) explorer.selectUnit(unit);
       },
     });
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
   });
 
   it("renders one edge per weight and one node per unit", () => {
@@ -87,7 +88,7 @@ describe("the network view", () => {
 
   it("GIVES A ZERO-WEIGHT EDGE A VISIBLE, SELECTABLE FORM", () => {
     explorer.setParameter(WEIGHT, 0);
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     const edge = container.querySelector('.dn-edge[data-key="e:0:0:1"]')!;
     // Dotted grey from CSS, since the colour scale has nothing to show.
     expect(edge.classList).toContain("is-faint");
@@ -101,7 +102,7 @@ describe("the network view", () => {
 
   it("RAILS EVERY EDGE INTO THE SELECTED UNIT, leaving each its colour", () => {
     explorer.selectUnit(WEIGHT_UNIT);
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     // One unit, every edge feeding it: two rails each.
     const feeding = CHECKPOINT.architecture.layerSizes[0];
     const rails = Array.from(container.querySelectorAll<SVGLineElement>(".edge-outline"));
@@ -151,7 +152,7 @@ describe("the network view", () => {
     node.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     expect(selected).toEqual({ layer: 0, out: 2 });
 
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     expect(container.querySelector('[data-key="n:1:2"]')!.classList).toContain(
       "is-selected",
     );
@@ -174,7 +175,7 @@ describe("the network view", () => {
     element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     expect(selected).toEqual(edgeUnit({ sourceLayerIndex: 0, targetNodeIndex: 1 }));
 
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     expect(container.querySelector('.dn-edge[data-key="e:0:1:1"]')!.classList).toContain(
       "is-selected",
     );
@@ -235,14 +236,14 @@ describe("the network view", () => {
 
   it("KEEPS THE SELECTION VISIBLE after an edit re-renders the view", () => {
     explorer.selectUnit(WEIGHT_UNIT);
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     const inputs = CHECKPOINT.architecture.layerSizes[0];
     expect(container.querySelector('[data-key="e:0:0:1"]')!.classList).toContain(
       "is-selected",
     );
 
     explorer.setParameter(WEIGHT, 0.5);
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     const stillSelected = container.querySelector('[data-key="e:0:0:1"]');
     expect(stillSelected!.classList).toContain("is-selected");
     // The whole unit, and only it: its node plus one edge per input.
@@ -252,7 +253,7 @@ describe("the network view", () => {
 
   it("shows the edited value, not the checkpoint's", () => {
     explorer.setParameter(WEIGHT, -2.5);
-    view.render(explorer.snapshot(), "weights", PALETTE);
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
     const label = container
       .querySelector('[data-key="e:0:0:1"]')!
       .getAttribute("aria-label");
@@ -420,7 +421,7 @@ describe("the network's node colours", () => {
 
   it("FILLS EACH NODE FROM ITS OWN FAMILY's MAP", () => {
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE);
+    view.render(snapshot, "weights", PALETTE, false);
     const last = CHECKPOINT.architecture.layerSizes.length - 1;
 
     // An input carries no colour: its value is a coordinate, and the
@@ -443,7 +444,7 @@ describe("the network's node colours", () => {
 
   it("still shows the activation as the number on a hidden node", () => {
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE);
+    view.render(snapshot, "weights", PALETTE, false);
     const hidden = container.querySelector('[data-key="n:1:0"]')!;
     expect(hidden.getAttribute("aria-label")).toContain(
       `activation ${format(snapshot.trace.act[1][0])}`,
@@ -455,9 +456,9 @@ describe("the network's node colours", () => {
 
   it("does not change a node's colour when the edge mode changes", () => {
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE);
+    view.render(snapshot, "weights", PALETTE, false);
     const before = container.querySelector('[data-key="n:1:0"]')!.getAttribute("fill");
-    view.render(snapshot, "contributions", PALETTE);
+    view.render(snapshot, "contributions", PALETTE, false);
     expect(container.querySelector('[data-key="n:1:0"]')!.getAttribute("fill")).toBe(before);
   });
 });
@@ -963,6 +964,39 @@ describe("the parameter tensors panel", () => {
     });
   });
 
+  it("NAMES THE TWO ROWS ONCE, rotated in the gutter on the left", () => {
+    view.render(explorer.snapshot());
+    const labels = Array.from(container.querySelectorAll<SVGElement>(".tensor-axis"));
+    // Every group shares the two bands, so the names are the diagram's own
+    // rows rather than something repeated per layer.
+    expect(labels.map((node) => node.textContent)).toEqual(["bias", "weight"]);
+    for (const node of labels) {
+      expect(node.getAttribute("transform")).toMatch(/^rotate\(-90 /);
+    }
+    // "bias" on the bias strip, "weight" below it on the weight block, and
+    // both left of every slot.
+    const [bias, weight] = labels.map((node) => Number(node.getAttribute("y")));
+    expect(bias).toBeLessThan(weight);
+    const leftmost = Math.min(
+      ...dotsOf(blocks()[0]).map((dot) => Number(dot.getAttribute("cx"))),
+    );
+    for (const node of labels) {
+      expect(Number(node.getAttribute("x"))).toBeLessThan(leftmost);
+    }
+  });
+
+  it("NAMES A TENSOR FROM ANYWHERE INSIDE IT, not only over its slots", () => {
+    view.render(explorer.snapshot());
+    for (const block of blocks()) {
+      // The <title> is the group's first child, so the frame and the gaps
+      // between the slots resolve their tooltip to it too. `.tensor-frame`
+      // carries `pointer-events: all` for the same reason: an unfilled
+      // shape is not hit-tested.
+      expect(block.firstElementChild!.tagName).toBe("title");
+      expect(block.querySelector(".tensor-frame")).not.toBeNull();
+    }
+  });
+
   it("names each tensor by its shape and the layers it joins", () => {
     view.render(explorer.snapshot());
     const titles = blocks().map((block) => block.querySelector("title")!.textContent);
@@ -1029,7 +1063,10 @@ describe("a classifier's panels", () => {
       ),
       "param",
     ),
-    output: createColorScale(niceLimit([CLASSIFIER_SURFACE.extent]), "output"),
+    output: createColorScale(
+      outputLimit(CLASSIFIER_CHECKPOINT.dataset, CLASSIFIER_SURFACE.extent),
+      "output",
+    ),
   };
 
   let container: HTMLElement;
@@ -1154,6 +1191,397 @@ describe("the samples on the map", () => {
 });
 
 /**
+ * Snapping the probe onto a sample.
+ *
+ * A free point next to a dot is not the dot: it has whatever target the
+ * generator defines there, or none at all on a classifier. Landing the
+ * probe *on* a sample is the only way to read that sample's own target and
+ * its own point loss, so a drag inside a drawn dot takes it rather than the
+ * pixel under the pointer.
+ */
+describe("snapping the probe onto a sample", () => {
+  /** The map's mark layer, with the geometry jsdom does not provide. */
+  function mapOf(container: HTMLElement): SVGElement {
+    const map = container.querySelector<SVGElement>(".io-marks")!;
+    // jsdom gives every element a zero-sized box, and the panel converts a
+    // client position through it. Reporting the view box's own 300 square
+    // makes a client coordinate one user unit, which is what the
+    // expectations below are written in.
+    Object.defineProperty(map, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 300, height: 300 }),
+    });
+    Object.defineProperty(map, "setPointerCapture", { value: () => {} });
+    return map;
+  }
+
+  function drag(map: SVGElement, px: number, py: number): void {
+    map.dispatchEvent(
+      new window.MouseEvent("pointerdown", { bubbles: true, clientX: px, clientY: py }),
+    );
+  }
+
+  const { domain, samples } = CHECKPOINT.dataset;
+  /** Somewhere that is not a sample, for showing the enlarged dot go away. */
+  const PROBE_AWAY = [0.649, -0.64];
+  const toPixelX = (x: number) => ((x - domain[0][0]) / (domain[0][1] - domain[0][0])) * 300;
+  const toPixelY = (y: number) => 300 - ((y - domain[1][0]) / (domain[1][1] - domain[1][0])) * 300;
+  const pixelOf = (n: number) => [toPixelX(samples.x[n][0]), toPixelY(samples.x[n][1])];
+
+  /**
+   * A sample no other dot is near, found rather than guessed.
+   *
+   * Four hundred dots in a 300-unit square overlap, and the nearest one
+   * wins a snap — correctly — so a test that names a sample has to name one
+   * where "nearest" is not in doubt.
+   */
+  function isolatedSample(): number {
+    for (let n = 0; n < samples.x.length; n += 1) {
+      const [px, py] = pixelOf(n);
+      const alone = samples.x.every((x, other) => {
+        if (other === n) return true;
+        return Math.hypot(toPixelX(x[0]) - px, toPixelY(x[1]) - py) > 10;
+      });
+      if (alone) return n;
+    }
+    throw new Error("every sample has a neighbour within a dot's width");
+  }
+
+  /** A pixel in the map that is in no dot at all, found rather than guessed. */
+  function emptyPixel(): [number, number] {
+    for (let px = 4; px < 300; px += 3) {
+      for (let py = 4; py < 300; py += 3) {
+        const clear = samples.x.every((x) => {
+          const [sx, sy] = [toPixelX(x[0]), toPixelY(x[1])];
+          return Math.hypot(sx - px, sy - py) > 8;
+        });
+        if (clear) return [px, py];
+      }
+    }
+    throw new Error("the map has no empty pixel, so this test cannot run");
+  }
+
+  let container: HTMLElement;
+  let explorer: Explorer;
+  let view: InputOutputView;
+
+  function frame(showSamples: boolean) {
+    const snapshot = explorer.snapshot();
+    return {
+      surface: SURFACE,
+      slices: domain.map((_, axis) =>
+        outputSlice(snapshot.parameters, ACTIVATION, domain, snapshot.x, axis),
+      ),
+      palette: PALETTE,
+      showSamples,
+    };
+  }
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.replaceChildren(container);
+    explorer = createExplorer(CHECKPOINT);
+    view = createInputOutputView({
+      container,
+      dataset: CHECKPOINT.dataset,
+      onProbe: (probe) => explorer.setProbe(probe),
+    });
+  });
+
+  it("TAKES THE SAMPLE a drag lands inside, with its own target", () => {
+    view.render(explorer.snapshot(), frame(true));
+    const n = isolatedSample();
+    const [px, py] = pixelOf(n);
+    // Inside the dot but not at its centre: the probe is the sample
+    // exactly, not the pixel the pointer was on.
+    drag(mapOf(container), px + 2, py - 1);
+    const snapshot = explorer.snapshot();
+    expect(snapshot.probe).toEqual({ kind: "sample", index: n });
+    expect(snapshot.x).toEqual(samples.x[n]);
+    expect(snapshot.target).toBe(samples.y[n]);
+  });
+
+  it("leaves the probe free where the drag lands in no dot", () => {
+    view.render(explorer.snapshot(), frame(true));
+    const [px, py] = emptyPixel();
+    drag(mapOf(container), px, py);
+    expect(explorer.snapshot().probe.kind).toBe("free");
+  });
+
+  it("DOES NOT SNAP ONTO A DOT NOBODY CAN SEE, while the samples are hidden", () => {
+    view.render(explorer.snapshot(), frame(false));
+    const [px, py] = pixelOf(isolatedSample());
+    drag(mapOf(container), px, py);
+    // Silently becoming a sample probe -- which has a target where a free
+    // one may not -- with nothing on screen to explain it.
+    expect(explorer.snapshot().probe.kind).toBe("free");
+  });
+
+  it("DRAWS THE SNAPPED DOT LARGER AND OVER THE CROSSHAIRS", () => {
+    explorer.setProbe({ kind: "sample", index: 7 });
+    view.render(explorer.snapshot(), frame(true));
+
+    const probed = container.querySelector<SVGElement>(".sample.is-probe");
+    expect(probed).not.toBeNull();
+    expect(container.querySelectorAll(".sample.is-probe")).toHaveLength(1);
+    const others = Array.from(
+      container.querySelectorAll<SVGElement>(".sample:not(.is-probe)"),
+    );
+    expect(others).toHaveLength(samples.y.length - 1);
+    for (const other of others) {
+      expect(Number(probed!.getAttribute("r"))).toBeGreaterThan(
+        Number(other.getAttribute("r")),
+      );
+    }
+
+    // Over the crosshairs, which is the whole point: the dot being probed
+    // is the one thing in the map they must not hide.
+    const order = Array.from(probed!.parentNode!.children);
+    const crosshairs = order.filter((node) =>
+      (node.getAttribute("class") ?? "").startsWith("crosshair"),
+    );
+    expect(crosshairs.length).toBeGreaterThan(0);
+    for (const line of crosshairs) {
+      expect(order.indexOf(probed!)).toBeGreaterThan(order.indexOf(line));
+    }
+    // And the crosshairs meet at that sample, so they point at it.
+    expect(probed!.getAttribute("cx")).toBe(
+      toPixelX(samples.x[7][0]).toFixed(2),
+    );
+  });
+
+  it("drops the enlarged dot again when the probe goes back to a free point", () => {
+    explorer.setProbe({ kind: "sample", index: 7 });
+    view.render(explorer.snapshot(), frame(true));
+    explorer.setProbe({ kind: "free", x: PROBE_AWAY });
+    view.render(explorer.snapshot(), frame(true));
+    expect(container.querySelectorAll(".sample.is-probe")).toHaveLength(0);
+    expect(container.querySelectorAll(".sample")).toHaveLength(samples.y.length);
+  });
+});
+
+/**
+ * The output bar in the network panel's right-hand gutter.
+ *
+ * The output node is the prediction -- its fill and its badge -- and the bar
+ * is the axis that fill came off, so the prediction and the target it is
+ * being compared against are two marks on one scale rather than two printed
+ * numbers to relate. It appears only with the samples shown and the probe on
+ * one of them: both conditions the reader can see on screen.
+ */
+describe("the output bar beside the output node", () => {
+  interface Marker {
+    side: string;
+    tipX: number;
+    tipY: number;
+    baseX: number;
+    title: string;
+  }
+
+  function markers(container: HTMLElement): Marker[] {
+    return Array.from(container.querySelectorAll<SVGElement>(".output-marker")).map(
+      (node) => {
+        const points = (node.getAttribute("points") ?? "")
+          .split(" ")
+          .map((pair) => pair.split(",").map(Number));
+        return {
+          side: node.classList.contains("is-left") ? "left" : "right",
+          baseX: points[0][0],
+          tipX: points[2][0],
+          tipY: points[2][1],
+          title: node.querySelector("title")?.textContent ?? "",
+        };
+      },
+    );
+  }
+
+  /** The bar's own frame, which is where the geometry is read from. */
+  function frameOf(container: HTMLElement) {
+    const rect = container.querySelector<SVGElement>(".output-bar-frame")!;
+    const read = (name: string) => Number(rect.getAttribute(name));
+    return { x: read("x"), y: read("y"), width: read("width"), height: read("height") };
+  }
+
+  /** Where a value belongs on the drawn bar, pinned to its ends. */
+  function rowOf(container: HTMLElement, value: number, limit: number): number {
+    const bar = frameOf(container);
+    const fraction = (limit - value) / (2 * limit);
+    return bar.y + bar.height * Math.min(1, Math.max(0, fraction));
+  }
+
+  function mount(checkpoint: ReturnType<typeof checkpointNamed>) {
+    const container = document.createElement("div");
+    document.body.replaceChildren(container);
+    const explorer = createExplorer(checkpoint);
+    const view = createNetworkView({
+      container,
+      layerSizes: checkpoint.architecture.layerSizes,
+      idPrefix: "bar-test",
+      onSelect: () => {},
+    });
+    return { container, explorer, view };
+  }
+
+  it("APPEARS ONLY WITH THE SAMPLES SHOWN AND THE PROBE ON ONE of them", () => {
+    const { container, explorer, view } = mount(CHECKPOINT);
+    // A free probe on this generator HAS a target -- the tilted plane is
+    // analytic everywhere -- so this is the display rule, not the absence
+    // of a number: a mark with no dot on screen to explain where it came
+    // from is worse than no mark.
+    expect(explorer.snapshot().target).not.toBeNull();
+    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    expect(container.querySelector(".output-bar")).toBeNull();
+
+    explorer.setProbe({ kind: "sample", index: 3 });
+    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    expect(container.querySelector(".output-bar")).toBeNull();
+
+    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    expect(container.querySelector(".output-bar")).not.toBeNull();
+    expect(markers(container)).toHaveLength(2);
+  });
+
+  it("MARKS THE PREDICTION LEFT AND THE TARGET RIGHT, on one scale", () => {
+    const { container, explorer, view } = mount(CHECKPOINT);
+    explorer.setProbe({ kind: "sample", index: 3 });
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, "weights", PALETTE, true);
+
+    const bar = frameOf(container);
+    const limit = PALETTE.output.limit;
+    const output = snapshot.trace.act[snapshot.trace.act.length - 1][0];
+    const [left, right] = markers(container).sort((a, b) => a.baseX - b.baseX);
+
+    expect(left.side).toBe("left");
+    expect(right.side).toBe("right");
+    // Each tip touches its own edge of the bar, at its own value's row.
+    expect(left.tipX).toBeCloseTo(bar.x, 6);
+    expect(right.tipX).toBeCloseTo(bar.x + bar.width, 6);
+    expect(left.tipY).toBeCloseTo(rowOf(container, output, limit), 2);
+    expect(right.tipY).toBeCloseTo(
+      rowOf(container, CHECKPOINT.dataset.samples.y[3], limit),
+      2,
+    );
+    // The bases point away from the bar, so the triangles face it.
+    expect(left.baseX).toBeLessThan(left.tipX);
+    expect(right.baseX).toBeGreaterThan(right.tipX);
+    expect(left.title).toContain(format(output));
+    expect(right.title).toBe(`target ${format(CHECKPOINT.dataset.samples.y[3])}`);
+  });
+
+  it("names the target marker in rotated text, on the marker's own row", () => {
+    const { container, explorer, view } = mount(CHECKPOINT);
+    explorer.setProbe({ kind: "sample", index: 3 });
+    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    const label = container.querySelector<SVGElement>(".output-bar-label")!;
+    expect(label.textContent).toBe("target");
+    const x = Number(label.getAttribute("x"));
+    const y = Number(label.getAttribute("y"));
+    expect(label.getAttribute("transform")).toBe(`rotate(-90 ${x.toFixed(2)} ${y.toFixed(2)})`);
+    const right = markers(container).find((mark) => mark.side === "right")!;
+    expect(y).toBeCloseTo(right.tipY, 2);
+    // Beyond the marker it labels, so it never sits over the bar.
+    expect(x).toBeGreaterThan(right.baseX);
+  });
+
+  it("PINS A PREDICTION THAT RUNS OFF THE SCALE to the end it ran past", () => {
+    const { container, explorer, view } = mount(CHECKPOINT);
+    explorer.setProbe({ kind: "sample", index: 3 });
+    const last = CHECKPOINT.parameters.length - 1;
+    // The scale is the dataset's targets, and a prediction is free to leave
+    // them: the marker can then only say which end it left by.
+    explorer.setParameter({ kind: "bias", layer: last, out: 0 }, 20 * PALETTE.output.limit);
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, "weights", PALETTE, true);
+    const bar = frameOf(container);
+    const left = markers(container).find((mark) => mark.side === "left")!;
+    expect(left.tipY).toBeCloseTo(bar.y, 2);
+    // Position is pinned; the number is not silently changed with it.
+    expect(left.title).toContain(
+      format(snapshot.trace.act[snapshot.trace.act.length - 1][0]),
+    );
+  });
+
+  it("RESERVES THE GUTTER whether the bar is drawn or not", () => {
+    // A frame that grew when a sample was selected would resize the whole
+    // diagram at the moment the reader was looking at one node of it.
+    const { container, explorer, view } = mount(checkpointNamed("tilted-plane__2-4-4-1__relu"));
+    const viewBoxes: string[] = [];
+    const rightmost = () => {
+      const nodes = Array.from(container.querySelectorAll<SVGElement>(".dn-node"));
+      return Math.max(
+        ...nodes.map((node) => Number(node.getAttribute("cx")) + Number(node.getAttribute("r"))),
+      );
+    };
+
+    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    viewBoxes.push(container.querySelector("svg")!.getAttribute("viewBox")!);
+    const diagram = rightmost();
+
+    explorer.setProbe({ kind: "sample", index: 3 });
+    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    viewBoxes.push(container.querySelector("svg")!.getAttribute("viewBox")!);
+    expect(viewBoxes[0]).toBe(viewBoxes[1]);
+    expect(rightmost()).toBeCloseTo(diagram, 6);
+
+    // And the bar is in the gutter the network was kept out of, clear of
+    // the badge written across the output node as well as of the node.
+    const bar = frameOf(container);
+    const marks = markers(container);
+    const width = Number(viewBoxes[1].split(" ")[2]);
+    const badge = Array.from(container.querySelectorAll<SVGElement>(".dn-node-label"));
+    const widest = Math.max(
+      ...badge.map(
+        (text) => Number(text.getAttribute("x")) + ((text.textContent ?? "").length * 18) / 4,
+      ),
+    );
+    expect(Math.min(...marks.map((mark) => mark.baseX))).toBeGreaterThan(widest);
+    expect(bar.x).toBeGreaterThan(diagram);
+    const label = container.querySelector<SVGElement>(".output-bar-label")!;
+    expect(Number(label.getAttribute("x"))).toBeLessThan(width);
+  });
+
+  it("PUTS A CLASS LABEL AT THE END OF THE SCALE, not on the logit axis", () => {
+    const classifier = checkpointNamed(CLASSIFIER);
+    const { container, explorer, view } = mount(classifier);
+    const palette = PALETTE_FOR(classifier, classifier.architecture.hiddenActivation!);
+    // A free point in a stochastic classification dataset has no label at
+    // all, so there is nothing to mark until the probe is on a sample.
+    expect(explorer.snapshot().target).toBeNull();
+    view.render(explorer.snapshot(), "weights", palette, true);
+    expect(container.querySelector(".output-bar")).toBeNull();
+
+    const index = classifier.dataset.samples.y.findIndex((y) => y === 1);
+    explorer.setProbe({ kind: "sample", index });
+    view.render(explorer.snapshot(), "weights", palette, true);
+    const bar = frameOf(container);
+    const right = markers(container).find((mark) => mark.side === "right")!;
+    // 0 and 1 are not points on the logit axis the bar spans, so the mark
+    // goes to the end of the scale its class wants -- the same convention
+    // the map uses to colour that very sample.
+    expect(right.tipY).toBeCloseTo(bar.y, 2);
+    // Formatted as the inspector formats the same number, where it reads
+    // `class y`, rather than prettified here alone.
+    expect(right.title).toBe(`target class ${format(1)}`);
+
+    const zero = classifier.dataset.samples.y.findIndex((y) => y === 0);
+    explorer.setProbe({ kind: "sample", index: zero });
+    view.render(explorer.snapshot(), "weights", palette, true);
+    const bottom = markers(container).find((mark) => mark.side === "right")!;
+    expect(bottom.tipY).toBeCloseTo(bar.y + bar.height, 2);
+
+    // The label is pulled back inside the bar rather than centred on a
+    // marker at its very end, where half the word would hang past the
+    // scale it names. A classifier's target is always at an end, so this
+    // is the usual case here rather than an edge of one.
+    const label = Number(
+      container.querySelector<SVGElement>(".output-bar-label")!.getAttribute("y"),
+    );
+    expect(label).toBeLessThan(bottom.tipY);
+    expect(label).toBeGreaterThan(bar.y + bar.height - 30);
+  });
+});
+
+/**
  * Every panel against every shape the controls can now select.
  *
  * The explorer used to have one architecture, so depth 0 (no hidden layer
@@ -1208,7 +1636,7 @@ describe("the panels at every selectable shape", () => {
         idPrefix: `t-${id}`,
         onSelect: () => {},
       });
-      view.render(explorer.snapshot(), "weights", PALETTE_FOR(checkpoint, activation));
+      view.render(explorer.snapshot(), "weights", PALETTE_FOR(checkpoint, activation), false);
       const edges = sizes.slice(1).reduce((total, out, index) => total + out * sizes[index], 0);
       expect(container.querySelectorAll('[data-key^="n:"]')).toHaveLength(
         sizes.reduce((a, b) => a + b, 0),
@@ -1280,11 +1708,6 @@ function PALETTE_FOR(
       ),
       "param",
     ),
-    output: createColorScale(
-      checkpoint.dataset.task === "classification"
-        ? niceLimit([surface.extent])
-        : niceLimit([surface.extent], checkpoint.dataset.samples.y),
-      "output",
-    ),
+    output: createColorScale(outputLimit(checkpoint.dataset, surface.extent), "output"),
   };
 }

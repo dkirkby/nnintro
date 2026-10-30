@@ -11,6 +11,13 @@
  * The map carries its own two axes as thin dashed lines through the origin,
  * so a position on it can be read without counting from the edges.
  *
+ * While the samples are visible a drag that lands inside a dot **snaps to
+ * that sample**, and the probe becomes the sample rather than a free point
+ * next to it: that is how a reader gets a real target and a real point loss
+ * out of this panel, and on a classifier it is the only way, since an
+ * arbitrary point in a stochastic dataset has no label (PLAN.md section 3).
+ * The snapped dot is drawn larger and over the crosshairs.
+ *
  * The slice backgrounds are the output scale, so a slice's height and its
  * background are two readings of the same number. The inputs have no colour
  * of their own: their axes carry their numbers.
@@ -28,6 +35,14 @@ const SVG = "http://www.w3.org/2000/svg";
  *  1 : 4 column and row ratios scale both without distorting either. */
 const MAP = 300;
 const SLICE = 75;
+/** A sample's drawn radius, and so the distance within which a drag snaps. */
+const SAMPLE_RADIUS = 3.2;
+/**
+ * The snapped sample's radius. Bigger than the others and drawn over the
+ * crosshairs, so the dot the probe is actually sitting on is the one thing
+ * in the map that is not underneath them.
+ */
+const SNAPPED_RADIUS = 5.4;
 
 export interface InputOutputView {
   render(snapshot: Snapshot, frame: InputOutputFrame): void;
@@ -91,15 +106,53 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
   grid.append(left.element, yAxis, map, xAxis, below.element);
   container.replaceChildren(grid);
 
+  /**
+   * Whether the samples are on screen, kept from the last render because
+   * `pick` needs it and a pointer event carries no frame.
+   */
+  let samplesVisible = false;
+
   const toPixelX = (x: number) => ((x - x1lo) / (x1hi - x1lo)) * MAP;
   const toPixelY = (y: number) => MAP - ((y - x2lo) / (x2hi - x2lo)) * MAP;
   const fromPixelX = (px: number) => x1lo + (px / MAP) * (x1hi - x1lo);
   const fromPixelY = (py: number) => x2lo + ((MAP - py) / MAP) * (x2hi - x2lo);
 
+  /**
+   * The sample the pointer is on, if any: the nearest one whose drawn dot
+   * the pointer is inside.
+   *
+   * Only while the samples are actually visible. Snapping onto something
+   * the reader cannot see would silently change what the probe *is* — a
+   * sample probe has a target and a point loss, a free probe on a
+   * classifier has neither — with nothing on screen to explain it.
+   */
+  function snapTarget(px: number, py: number): number | null {
+    if (!samplesVisible) return null;
+    let found: number | null = null;
+    let nearest = Infinity;
+    for (let n = 0; n < dataset.samples.x.length; n += 1) {
+      const sample = dataset.samples.x[n];
+      const distance = Math.hypot(toPixelX(sample[0]) - px, toPixelY(sample[1]) - py);
+      if (distance <= SAMPLE_RADIUS && distance < nearest) {
+        nearest = distance;
+        found = n;
+      }
+    }
+    return found;
+  }
+
   function pick(event: PointerEvent): void {
     const rect = mapSvg.getBoundingClientRect();
     const px = ((event.clientX - rect.left) / rect.width) * MAP;
     const py = ((event.clientY - rect.top) / rect.height) * MAP;
+    // A dot under the pointer wins: the probe lands exactly on that sample
+    // rather than near it, which is what makes its own target and its own
+    // point loss the ones on screen.
+    const snapped = snapTarget(px, py);
+    if (snapped !== null) {
+      onProbe({ kind: "sample", index: snapped });
+      return;
+    }
     onProbe({
       kind: "free",
       x: [
@@ -136,6 +189,7 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
 
   function render(snapshot: Snapshot, frame: InputOutputFrame): void {
     const { surface, slices, palette, showSamples } = frame;
+    samplesVisible = showSamples;
     drawSurface(surface, palette.output);
 
     const px = toPixelX(snapshot.x[0]);
@@ -153,36 +207,30 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
       const zero = toPixelY(0);
       marks.push(line(0, zero, MAP, zero, "map-axis"));
     }
+    /** The sample the probe is sitting on, if it is sitting on one. */
+    const probed = snapshot.probe.kind === "sample" ? snapshot.probe.index : null;
+    let snapped: SVGElement | null = null;
     if (showSamples) {
-      dataset.samples.y.forEach((y, n) => {
-        const mark = document.createElementNS(SVG, "circle");
-        mark.setAttribute("cx", toPixelX(dataset.samples.x[n][0]).toFixed(2));
-        mark.setAttribute("cy", toPixelY(dataset.samples.x[n][1]).toFixed(2));
-        mark.setAttribute("r", "3.2");
-        // The target on the same scale as the surface behind it, so a dot
-        // that disappears into its background is one the model already fits.
-        mark.setAttribute(
-          "fill",
-          palette.output.css(
-            isClassifier ? (y > 0.5 ? palette.output.limit : -palette.output.limit) : y,
-          ),
-        );
-        // Training and held-out samples are drawn alike. The split is a
-        // number in "Prediction and loss", not a glyph to decode: no
-        // checkpoint here can show a gap the map would explain, since the
-        // regression targets are noiseless and the classifiers' overlap is
-        // in the targets rather than in the split.
-        mark.setAttribute("class", "sample");
-        marks.push(mark);
-      });
+      for (let n = 0; n < dataset.samples.y.length; n += 1) {
+        const mark = sampleMark(n, palette, n === probed);
+        if (n === probed) snapped = mark;
+        else marks.push(mark);
+      }
     }
     marks.push(...crosshair(0, py, MAP, py), ...crosshair(px, 0, px, MAP));
+    // Last, so the dot the probe is on is over the crosshairs rather than
+    // under them: it is the one thing in the map the crosshairs must not
+    // hide, since it is what they are pointing at.
+    if (snapped) marks.push(snapped);
     mapSvg.replaceChildren(...marks);
     mapSvg.setAttribute(
       "aria-label",
       `${quantity} over both inputs. Probe at ` +
         `${snapshot.x[0].toFixed(2)}, ${snapshot.x[1].toFixed(2)}, where ` +
-        `${quantity} is ${snapshot.trace.output.toFixed(3)}.`,
+        `${quantity} is ${snapshot.trace.output.toFixed(3)}.` +
+        (probed === null
+          ? ""
+          : ` On sample ${probed}, whose target is ${dataset.samples.y[probed]}.`),
     );
 
     below.draw({
@@ -203,6 +251,30 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
         `${quantity} against ${dataset.inputNames[1]} with ` +
         `${dataset.inputNames[0]} held at ${snapshot.x[0].toFixed(3)}.`,
     });
+  }
+
+  /** One sample's dot: its target's colour, enlarged if the probe is on it. */
+  function sampleMark(n: number, palette: Palette, isProbe: boolean): SVGElement {
+    const y = dataset.samples.y[n];
+    const mark = document.createElementNS(SVG, "circle");
+    mark.setAttribute("cx", toPixelX(dataset.samples.x[n][0]).toFixed(2));
+    mark.setAttribute("cy", toPixelY(dataset.samples.x[n][1]).toFixed(2));
+    mark.setAttribute("r", String(isProbe ? SNAPPED_RADIUS : SAMPLE_RADIUS));
+    // The target on the same scale as the surface behind it, so a dot
+    // that disappears into its background is one the model already fits.
+    mark.setAttribute(
+      "fill",
+      palette.output.css(
+        isClassifier ? (y > 0.5 ? palette.output.limit : -palette.output.limit) : y,
+      ),
+    );
+    // Training and held-out samples are drawn alike. The split is a
+    // number in "Prediction and loss", not a glyph to decode: no
+    // checkpoint here can show a gap the map would explain, since the
+    // regression targets are noiseless and the classifiers' overlap is
+    // in the targets rather than in the split.
+    mark.setAttribute("class", isProbe ? "sample is-probe" : "sample");
+    return mark;
   }
 
   return {

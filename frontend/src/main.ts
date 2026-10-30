@@ -29,7 +29,7 @@ import { hiddenActivation } from "./model/evaluate.js";
 import { outputSlice, outputSurface, type Surface } from "./model/surface.js";
 import { unitParameters, type Checkpoint, type LayerParameters } from "./model/types.js";
 import { createExplorer, describeProvenance, type Explorer, type Snapshot } from "./state.js";
-import { createColorScale, niceLimit, type Palette } from "./view/colormap.js";
+import { createColorScale, niceLimit, outputLimit, type Palette } from "./view/colormap.js";
 import { createHelp, type Help } from "./view/help.js";
 import { createInputOutputView } from "./view/inputoutput.js";
 import { createInspector } from "./view/inspector.js";
@@ -64,11 +64,12 @@ const SHELL = `
         <div id="tensors"></div>
         <p class="legend" id="tensor-legend">
           Every parameter the network has, as the shapes they are stored in:
-          one group per layer, the bias vector above its weight matrix, and
-          one light dot per value. A column of a group is one unit of the
-          layer it feeds — its bias and the weights into it — so selecting a
-          unit in the network panel shades exactly that band. A row of a
-          weight matrix is one source the layer reads from. Hover a
+          one group per layer, the bias vector above its weight matrix —
+          the two rows are named in the gutter on the left — and one light
+          dot per value. A column of a group is one unit of the layer it
+          feeds — its bias and the weights into it — so selecting a unit in
+          the network panel shades exactly that band. A row of a weight
+          matrix is one source the layer reads from. Hover anywhere inside a
           rectangle to see what it is.
         </p>
       </section>
@@ -300,24 +301,19 @@ async function start(): Promise<void> {
      *
      * - **param**: every weight and bias, so an edge and a hidden node's
      *   fill are the same quantity on the same scale.
-     * - **output**: the whole prediction surface, and the targets too for a
-     *   regression — they are the same quantity, and they count even while
-     *   the samples are hidden, so showing them recolours nothing. A
-     *   classifier's targets are class labels, not logits, so they are left
-     *   out of its limit: 0 and 1 are not points on the axis the surface
-     *   spans.
+     * - **output**: the range of the dataset's own targets, as its
+     *   generator defines it over the whole domain — so full red and full
+     *   blue are the most extreme targets there are, rather than the most
+     *   extreme the sampling happened to draw. `outputLimit`
+     *   (`view/colormap.ts`) owns that rule and the classifier's, where
+     *   there is no target range to span.
      */
     function paletteFor(snapshot: Snapshot, surface: Surface): Palette {
       const weights = snapshot.parameters.flatMap((layer) => layer.W.flat());
       const biases = snapshot.parameters.flatMap((layer) => layer.b);
       return {
         param: createColorScale(niceLimit(weights, biases), "param"),
-        output: createColorScale(
-          isClassifier
-            ? niceLimit([surface.extent])
-            : niceLimit([surface.extent], dataset.samples.y),
-          "output",
-        ),
+        output: createColorScale(outputLimit(dataset, surface.extent), "output"),
       };
     }
 
@@ -341,7 +337,7 @@ async function start(): Promise<void> {
         unitParameters(snapshot.parameters, snapshot.selection),
       );
 
-      networkView.render(snapshot, mode, palette);
+      networkView.render(snapshot, mode, palette, showSamples);
       tensors.render(snapshot);
       inputOutput.render(snapshot, { surface, slices, palette, showSamples });
       paramSpace.render(snapshot, {
@@ -373,7 +369,17 @@ async function start(): Promise<void> {
         `${dataset.inputNames[0]} = ${format(snapshot.x[0])}; below, ` +
         `${dataset.inputNames[0]} varies at ${dataset.inputNames[1]} = ` +
         `${format(snapshot.x[1])}. Slice height and background are the same ` +
-        `±${palette.output.limit} ${isClassifier ? "logit" : "output"} scale.` +
+        `±${palette.output.limit} ${isClassifier ? "logit" : "output"} scale` +
+        (isClassifier
+          ? `, fitted to this network's own range.`
+          : `, which is the whole range of ${dataset.label}'s targets — ` +
+            `the range its formula covers over the whole square, not just ` +
+            `the range these ${dataset.samples.y.length} samples happened ` +
+            `to draw — and so fixed while you edit: full red and full blue ` +
+            `are the most extreme targets there are, and a prediction ` +
+            `beyond them saturates.`) +
+        ` With the samples shown, dragging inside a dot snaps the probe onto ` +
+        `that sample, which is where its target and its point loss come from.` +
         (isClassifier
           ? ` The neutral band is the decision boundary: the logit is zero ` +
             `there, so p = 0.5. Samples are drawn at the end of the scale ` +

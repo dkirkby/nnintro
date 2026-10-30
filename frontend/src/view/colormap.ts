@@ -32,6 +32,8 @@
  *   reaches the canvas on the next repaint.
  */
 
+import type { DatasetSpec } from "../model/types.js";
+
 /** A colour in OKLab, the space both renderings interpolate in. */
 interface Lab {
   L: number;
@@ -102,6 +104,68 @@ export function niceLimit(...groups: Iterable<number>[]): number {
 /** Back to the few significant digits a ladder stop actually has. */
 function round(value: number): number {
   return Number(value.toPrecision(12));
+}
+
+/**
+ * The smallest limit that saturates at the largest value given, rounded up
+ * to two significant digits so it still prints as an axis tick.
+ *
+ * `niceLimit`'s round ladder exists so that a limit computed from the
+ * parameters does not shift underfoot as they are edited. A limit computed
+ * from a dataset's own fixed targets cannot shift, so the ladder buys
+ * nothing there and costs most of the scale: the tilted plane's targets used
+ * to reach 1.07, which the ladder rounded up to 1.5, leaving even its most
+ * extreme sample at 71% of the colour it should have and nothing on the map
+ * ever fully red or blue. Here the extreme value IS the extreme colour, to
+ * within the rounding — 1.07 would become 1.1, which is 97% of the way.
+ */
+export function snugLimit(...groups: Iterable<number>[]): number {
+  let largest = 0;
+  for (const group of groups) {
+    for (const value of group) {
+      if (!Number.isFinite(value)) continue;
+      const magnitude = Math.abs(value);
+      if (magnitude > largest) largest = magnitude;
+    }
+  }
+  if (!(largest > 0)) return 1;
+  // Two significant digits: the tenth of the leading decade.
+  const step = 10 ** (Math.floor(Math.log10(largest)) - 1);
+  // The same slack `niceLimit` uses, so a value already at two digits does
+  // not get pushed up a step by the rounding in the decade itself.
+  return round(Math.ceil((largest / step) * (1 - 1e-12)) * step);
+}
+
+/**
+ * The limit of the **output** scale: which number is full red or full blue.
+ *
+ * For a regression dataset it is the range of the generator's own targets,
+ * and nothing else. A limit that is a function of the dataset alone cannot
+ * move when the parameters do, so the colour under the probe means the same
+ * number either side of an edit — which is what makes the map comparable
+ * across one — and it does not depend on whether the samples are drawn, so
+ * showing them recolours nothing. The consequence is deliberate: a
+ * prediction outside the targets' range saturates, and a randomized network
+ * paints the whole map at one end of the scale, which is the honest reading
+ * of a model nowhere near its data.
+ *
+ * That range is the generator's (`dataset.targetRange`, declared in
+ * `src/nnintro/datasets.py`) and not the drawn samples', because the draw
+ * falls short of it: the tilted plane peaks at the corner (+1, −1) and 400
+ * uniform draws do not land on a corner, so a scale fitted to the sample
+ * would end at 0.91 rather than 1, and would move with the sampling seed.
+ * Where a generator declares no range the drawn targets are the only range
+ * there is, and the scale falls back to them.
+ *
+ * A classifier has no target range at all — 0 and 1 are class labels, not
+ * logits, and everything these panels draw is a logit — so there the limit
+ * is the surface's own extent, and on the round ladder, because that one
+ * does move as the parameters are edited. Its samples are then drawn at the
+ * ends of the scale rather than at values on it.
+ */
+export function outputLimit(dataset: DatasetSpec, surfaceExtent: number): number {
+  if (dataset.task === "classification") return niceLimit([surfaceExtent]);
+  return snugLimit(dataset.targetRange ?? dataset.samples.y);
 }
 
 export function createColorScale(

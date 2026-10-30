@@ -177,7 +177,7 @@ describe("createExplorer", () => {
   it("a free probe in an analytic dataset has a target; the loss is real", () => {
     explorer.setProbe({ kind: "free", x: [0.5, -0.5] });
     const snapshot = explorer.snapshot();
-    expect(snapshot.target).toBeCloseTo(0.6 * 0.5 - 0.4 * -0.5 + 0.2, 12);
+    expect(snapshot.target).toBeCloseTo(0.5 * 0.5 - 0.3 * -0.5 + 0.2, 12);
     expect(snapshot.pointLoss).not.toBeNull();
   });
 

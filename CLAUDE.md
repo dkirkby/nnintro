@@ -56,9 +56,15 @@ ordered; dataset and activation are named rather than ordered, so they are
 button groups. A slider's value is a stop *index*, never the quantity, so the
 stops need be neither consecutive nor evenly spaced. Deepening gives the new
 layer the width of the last one that already existed (2-4-1 becomes 2-4-4-1),
-and the width control for a layer that does not exist is *hidden* rather than
-disabled, since there is no such thing as the width of hidden layer 1 at
-depth 0. Every stop is checked against the published catalog before it is
+and the width control for a layer that does not exist is **disabled in
+place** rather than hidden: the depth slider sits directly above that row,
+and a row that reflowed on every depth change would move a control out from
+under the pointer that had just used it. A disabled control shows the width
+its layer *would* get, so it is a preview of the next stop up rather than a
+blank or a stale number, and none of its stops is struck through — the
+catalog has those widths, there is just no layer to apply them to yet.
+(It was hidden until the layout churn made the case for keeping the row
+fixed; do not revert that without solving the reflow.) Every stop is checked against the published catalog before it is
 offered: `createCatalogIndex` (`model/catalog.ts`) enumerates the manifest,
 unavailable buttons are disabled, unavailable slider stops are struck
 through, and one dragged onto anyway snaps back and says why. A depth-0 entry
@@ -80,6 +86,16 @@ irreducible error is in the overlap of the classes rather than in which
 split a point landed in. Do not reintroduce a dashed outline for the
 held-out split without a dataset whose splits actually differ.
 
+While the samples are visible a drag that lands inside a dot **snaps onto
+that sample**: the probe becomes the sample rather than a free point beside
+it, which is the only way to read a real target and a real point loss out
+of this panel, and on a classifier the only way at all, since an arbitrary
+point in a stochastic dataset has no label. The snapped dot is drawn larger
+and last, so it is over the crosshairs rather than under them. Snapping is
+gated on the samples actually being drawn: taking the probe onto something
+invisible would silently change what the probe *is* — a sample probe has a
+target where a free one may not — with nothing on screen to explain it.
+
 It opens with no
 samples drawn and the probe at `OPENING_PROBE` (`state.ts`), 0.5 in each
 input, clamped into that input's domain: the panel is there to be probed
@@ -89,6 +105,31 @@ zeroed.
 
 The display modes now only switch what the **edges** show (weight or
 contribution). Node fills never vary with the mode.
+
+The output node is the prediction — its fill and its badge — so **the
+output scale stands up beside it**, in a gutter down the right of the
+frame, with the prediction marked by a triangle on its left and the probed
+sample's target by one on its right, under a rotated "target" label. The
+bar is the axis that node's own fill came off, so the two numbers the loss
+is made of are a pair of marks on one scale rather than two printed numbers
+the reader has to relate; it replaced a printed target for that reason. The
+gutter is reserved whether or not the bar is drawn — the network is laid
+out in `NETWORK_BOX`, 56 units narrower than the frame — because a frame
+that grew when a sample was selected would resize the whole diagram at the
+moment the reader was looking at one node of it.
+
+It is drawn only when the samples are shown **and** the probe is on one of
+them: both conditions the reader can see on screen. A free probe has a
+target too on a generator with an analytic one, but marking it would put a
+number on the bar with nothing on screen to say where it came from. A
+classifier's target is a class label rather than a point on the logit axis
+the bar spans, so its marker goes to the end of the scale its class wants,
+exactly as the map draws that same sample (PLAN.md section 3); a prediction
+that runs past the scale is pinned to the end it ran past, with the real
+number in the marker's title and on the node's badge. The strip is drawn as
+a stack of bands rather than as an SVG gradient, so each band is a
+`color-mix` of the theme's own tokens and a theme change repaints it with
+no re-render.
 
 **A classifier's output is a logit, and the panels say so.** Two of the four
 datasets are classifiers, so this is not a hypothetical: sigmoid is applied
@@ -114,8 +155,15 @@ every weight feeding it — so the selected unit shades as a single vertical
 band across both rectangles, which is the same thing the network panel's
 selection means. Rows of a weight matrix are the sources. (The columns run
 this way round because the bias strip sits above the matrix and has to line
-up with it.) Each rectangle carries an SVG `<title>`, so hovering names it:
-"2×4 weights connecting the input layer to hidden layer 1".
+up with it.) Each rectangle carries an SVG `<title>`, so hovering **anywhere inside it**
+names it: "2×4 weights connecting the input layer to hidden layer 1". The
+title is the group's first child and `.tensor-frame` sets
+`pointer-events: all`, because the frame is unfilled and an unfilled shape
+is not hit-tested — without that the tooltip answers only over the slots,
+and the gaps between them, which are most of the rectangle, say nothing.
+Every group shares the same two bands, so they are named once in a rotated
+gutter down the left — "bias" above, "weight" below — rather than by a pair
+of labels repeated per layer.
 
 Each of the four plot panels keeps its explanation in a popup behind a `?`
 in its heading rather than printed underneath it (`view/help.ts`). The popup
@@ -194,8 +242,8 @@ uv run nnintro train     # curate + train the catalog -> data/
 uv run nnintro publish   # data/ -> frontend/public/data (the tracked snapshot)
 uv run nnintro verify    # re-check the published snapshot
 uv run pytest            # 26 pipeline tests, ~1 s
-                         # `nnintro train` runs 76 configurations x 96
-                         # attempts over a process pool: ~15 minutes, and it
+                         # `nnintro train` runs 76 configurations x 256
+                         # attempts over a process pool: ~40 minutes, and it
                          # exits non-zero if any configuration ends up with
                          # no checkpoint. `--only <substring>` restricts it.
 
@@ -272,13 +320,17 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
 - **Training alone does not produce a teaching asset.** Plain training on the
   tilted plane reliably routes everything through one hidden unit and leaves
   the rest with ~1e-6 output weights: it fits perfectly and demonstrates
-  nothing. `train.curate` trains 96 times and keeps the lowest training loss
+  nothing. `train.curate` trains 256 times and keeps the lowest training loss
   among the attempts that pass `SELECTION_CRITERIA`, and the report is
   exported under `selection` so the choice can be audited. Do not "simplify"
-  this back to a single `train()` call, and do not lower the attempt count:
-  the tilted plane with two ReLU hidden layers accepts roughly one attempt in
-  eight and its first acceptable seed is the 38th, so 24 attempts leaves two
-  holes in the catalog.
+  this back to a single `train()` call, and do not lower the attempt count.
+  The hardest entry is the tilted plane at 2-4-4-1 with ReLU: eight hidden
+  units fitting a two-parameter plane leaves most of them with nothing to
+  do, so only about **one attempt in fifty** is acceptable and its first
+  acceptable seed is the **114th** — 96 attempts leaves that configuration a
+  hole, which is how the budget came to be 256 rather than 96. The extra is
+  not rounding: at 128 that entry would rest on two seeds, and the
+  acceptance pattern moves with numpy and torch.
   - The criteria are about **legibility, not accuracy**, and they have to be:
     a linear model on XOR and a 2-2-1 on the curved surface cannot fit their
     datasets, and those imperfect fits are intended assets (PLAN.md section
@@ -307,7 +359,33 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   Within a family a colour means one number: the output node is the colour of
   the surface under the probe. Each limit is a function of the parameters and
   the dataset alone, never of the probe, or dragging the probe would recolour
-  the panel under it. Zero is the neutral surface colour: do not reintroduce a
+  the panel under it. The **output** limit is narrower than that, and
+  `outputLimit` (`view/colormap.ts`) is the only place it is decided: for a
+  regression it is `dataset.targetRange`, the range of the targets and
+  nothing else, so it does not move when the parameters do and the colour
+  under the probe means the same number either side of an edit. That range
+  is the **generator's**, declared in `datasets.py` and published with every
+  checkpoint, not the drawn samples': both generators top out at |y| = 1 by
+  construction — the tilted plane's coefficients were chosen for it (see
+  README's deviations) — but 400 uniform draws do not land on the corner
+  where the plane peaks, so a scale fitted to the sample would end at 0.91
+  instead of 1 and would move with the sampling seed. The pipeline is the
+  only thing that can know the range (it has the formula *and* can search
+  the domain), which is why this is an asset field rather than a browser
+  computation. Where a generator declares no range, the limit falls back to
+  `snugLimit(dataset.samples.y)`, the drawn targets being the only range
+  there is; `snugLimit` rather than `niceLimit` because a limit that cannot
+  shift underfoot does not need a round ladder to hold it still, and the
+  ladder would spend most of the scale — the tilted plane's targets used to
+  reach 1.07, which the ladder rounded to 1.5, leaving even its most
+  extreme sample at 71% of its colour and nothing on that map ever fully
+  red or blue. The consequence is deliberate — a prediction outside the
+  targets' range saturates, and `Randomize all` paints the whole map at one
+  end of the scale, which is the honest reading of a model nowhere near its
+  data. Do not put `surface.extent` back into it. A classifier has no such
+  range (0 and 1 are class labels, not logits, and the surface is a logit),
+  so there the limit *is* the surface's extent and its samples are drawn at
+  the ends of that scale rather than at values on it. Zero is the neutral surface colour: do not reintroduce a
   brightness floor to make small values visible, because it moves zero off
   neutral. Edge widths carry that floor instead.
 - **An edge the scale cannot show still has to be visible and selectable.**

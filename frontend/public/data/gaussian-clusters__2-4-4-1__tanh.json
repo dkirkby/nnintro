@@ -1,12 +1,12 @@
 {
- "schemaVersion": "0.2.0",
+ "schemaVersion": "0.3.0",
  "checkpointId": "gaussian-clusters__2-4-4-1__tanh",
  "dataset": {
   "id": "gaussian-clusters",
   "label": "Gaussian clusters",
   "task": "classification",
   "description": "two overlapping Gaussian clusters, one per class",
-  "generatorVersion": 1,
+  "generatorVersion": 2,
   "domain": [
    [
     -1.0,
@@ -23,6 +23,7 @@
   ],
   "targetName": "class",
   "hasAnalyticTarget": false,
+  "targetRange": null,
   "preprocessing": null,
   "samples": {
    "x": [
@@ -2650,15 +2651,15 @@
     0.95
    ]
   },
-  "attempts": 96,
+  "attempts": 256,
   "bestTrainLossOverall": 0.04663079891821388,
   "bestTrainLossAccepted": 0.04663079891821388,
-  "accepted_count": 89,
-  "rejected_count": 7,
+  "accepted_count": 235,
+  "rejected_count": 21,
   "diverged_count": 0,
   "rejected_by": {
-   "noDeadUnits": 7,
-   "noVestigialUnits": 1
+   "noDeadUnits": 20,
+   "noVestigialUnits": 3
   },
   "chosen_init_seed": 59
  },
@@ -3208,5 +3209,5 @@
    "pointGradient": null
   }
  ],
- "contentHash": "sha256:d879d8989012857a46def2c74d1bcc96c667a107cfeac7222b4ba06de9e829ca"
+ "contentHash": "sha256:23098139d050657ea79be9e848d52709b0182c3ec61cdf4a9b8e792b2efd2516"
 }

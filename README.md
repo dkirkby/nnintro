@@ -79,7 +79,7 @@ A checkpoint holds:
 | Field | Contents |
 | --- | --- |
 | `schemaVersion`, `checkpointId`, `contentHash` | provenance; the hash is SHA-256 over the canonical JSON with the hash field removed |
-| `dataset` | id, short label, task, domain, input/target names, generator version, and the fixed seeded samples with their split membership |
+| `dataset` | id, short label, task, domain, input/target names, generator version, the generator's own range of targets over the domain, and the fixed seeded samples with their split membership |
 | `architecture` | layer sizes, hidden activation, output transform, loss name, weight layout, and the ReLU derivative convention |
 | `parameters` | per layer, `W` with shape `[out][in]` and `b` with shape `[out]` |
 | `training` | the full `TrainConfig`, torch version, dtype, final losses |
@@ -97,6 +97,16 @@ A checkpoint holds:
   split. Classification uses BCE from logits with the same averaging.
 - **`splitGradients` differentiates the mean loss.** It is not a mean of
   per-example gradient magnitudes, which is a different quantity.
+- **`dataset.targetRange` is the generator's range, not the sample's.** It is
+  what the browser's output colour scale spans, and the two differ: the
+  tilted plane's targets reach 1 at the corner (+1, -1), and 400 uniform
+  draws do not land on a corner, so a scale fitted to the draw would end at
+  0.91 and would move with the sampling seed. The range over a domain is a
+  property of the formula, so `datasets.py` declares it and
+  `tests/test_datasets.py` checks each declaration against a dense grid. It
+  is `null` for a classifier, whose targets are class labels rather than
+  values on the logit axis its panels draw; the scale is then the surface's
+  own extent.
 - **`reluDerivativeAtZero` is 0**, stated in the asset rather than assumed by
   the reader. The `relu-kink` golden probe sits exactly on a kink.
 - **Everything is float64**, on both sides. The browser recomputes in
@@ -127,7 +137,7 @@ derivative against centered finite differences.
 ## Deviations from `PLAN.md`
 
 - Training is followed by a **curation** step the plan calls for in section 8
-  but does not specify: `train.curate` runs 96 attempts and keeps the one
+  but does not specify: `train.curate` runs 256 attempts and keeps the one
   with the lowest training loss among those that pass `SELECTION_CRITERIA`.
   Without it, training reliably produces a model that fits the plane
   perfectly through a single hidden unit and teaches nothing. The chosen
@@ -145,11 +155,26 @@ derivative against centered finite differences.
     would bias it below its training counterpart, making the one quantity
     that is supposed to say something about generalization an artefact of
     selection instead.
-  - 96 attempts is what the catalog needs to come out complete, not a margin:
-    the tilted plane with two ReLU hidden layers accepts about one attempt in
-    eight, and its first acceptable seed is the 38th. A configuration that
-    still cannot be curated is reported as a GAP and makes `train` exit
-    non-zero, rather than silently leaving a hole.
+  - 256 attempts is what the catalog needs to come out complete. The hardest
+    entry is the tilted plane at 2-4-4-1 with ReLU: eight hidden units
+    fitting a two-parameter plane leaves most of them with nothing to do, so
+    only about one attempt in fifty survives the unit criteria and its first
+    acceptable seed is the 114th. The budget was 96 until that configuration
+    became a gap; the rest above 114 is room for the acceptance pattern to
+    shift under a different numpy or torch, since at 128 it would rest on
+    two seeds. A configuration that still cannot be curated is reported as a
+    GAP and makes `train` exit non-zero, rather than silently leaving a hole.
+- **The tilted plane is `y = 0.5 x1 - 0.3 x2 + 0.2`**, not the
+  `0.6 x1 - 0.4 x2 + 0.2` of PLAN.md section 3's table. The coefficients are
+  equally interpretable — that is the dataset's whole purpose — but these
+  sum so that |y| reaches exactly 1 at the corner (+1, -1) and nowhere
+  exceeds it. The browser's output colour scale spans a dataset's declared
+  `targetRange`, so full red and full blue now mean "the most extreme target
+  there is" on a scale whose ends are round numbers. Keep
+  `|a| + |b| + |c| = 1` if these are ever changed again;
+  `tests/test_datasets.py` pins it.
+  `GENERATOR_VERSION` went to 2 at the same time, so a checkpoint built
+  against the old formula is identifiable rather than silently mixed in.
 - **Training and held-out samples are drawn alike on the map.** The split is
   a number in "Prediction and loss", not a glyph to decode: the two
   regression generators are noiseless, so their splits cannot differ, and the

@@ -91,6 +91,33 @@ def test_the_kink_probe_sits_exactly_on_a_kink(payload):
     assert payload["architecture"]["reluDerivativeAtZero"] == 0.0
 
 
+def test_the_kink_probe_is_reproducible_in_the_browsers_arithmetic(payload):
+    """Every ReLU gate must read the same summed either way.
+
+    The browser starts a unit's sum from the bias and adds the weighted
+    inputs in index order; torch sums however its gemv does. Those differ in
+    the last bit, which is nothing at all except exactly on a kink -- where
+    it is the difference between phi'(z) being 0 and being 1, and so a
+    sensitivity that differs in the first digit. The probe exists to pin
+    that convention, so it is only a fixture if both arithmetics agree about
+    every unit, not just the one it was solved for.
+    """
+    probe = next(p for p in payload["goldenProbes"] if p["id"] == "relu-kink")
+    x = probe["x"]
+    activations = list(x)
+    for layer, stored in zip(payload["parameters"], probe["pre"][1:]):
+        ours = []
+        for row, bias in zip(layer["W"], layer["b"]):
+            total = bias
+            for w, a in zip(row, activations):
+                total += w * a
+            ours.append(total)
+        for mine, theirs in zip(ours, stored):
+            assert (mine > 0) == (theirs > 0)
+            assert (mine == 0.0) == (theirs == 0.0)
+        activations = [max(0.0, v) for v in ours]
+
+
 def test_the_inactive_probe_actually_has_inactive_units(payload):
     probe = next(p for p in payload["goldenProbes"] if p["id"] == "most-inactive")
     assert any(a == 0.0 for a in probe["act"][1])
@@ -121,6 +148,24 @@ def test_non_finite_values_fail_the_export(payload):
     broken["parameters"][0]["b"][0] = float("nan")
     with pytest.raises(FloatingPointError):
         export._assert_finite(broken)
+
+
+def test_the_target_range_is_carried_to_the_browser(payload):
+    """The colour scale's ends travel with the asset, not with the draw.
+
+    The browser cannot evaluate the generator over the domain -- it has the
+    formula but not the search -- so the range it paints has to arrive in
+    the checkpoint and in the manifest entry the controls read.
+    """
+    declared = datasets.tilted_plane().target_range
+    assert payload["dataset"]["targetRange"] == list(declared)
+    manifest = export.build_manifest([payload])
+    assert manifest["datasets"][0]["targetRange"] == list(declared)
+    # The sampled extreme falls short of it, which is the whole reason the
+    # range is declared rather than measured.
+    assert max(abs(y) for y in payload["dataset"]["samples"]["y"]) < max(
+        abs(end) for end in declared
+    )
 
 
 def test_manifest_lists_every_checkpoint(payload):

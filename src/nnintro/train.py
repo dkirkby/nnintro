@@ -209,7 +209,7 @@ def _unit_report(result: TrainResult, dataset: Dataset) -> dict:
 
 
 def curate(
-    dataset: Dataset, config: TrainConfig, attempts: int = 96
+    dataset: Dataset, config: TrainConfig, attempts: int = 256
 ) -> tuple[TrainResult, dict]:
     """Train repeatedly and keep the best checkpoint that is worth showing.
 
@@ -225,11 +225,15 @@ def curate(
     linear model on XOR, a 2-2-1 on the curved surface -- are intended
     teaching assets rather than failures (PLAN.md section 3).
 
-`attempts` has to be this large for the catalog to come out complete,
-    not as a margin of safety: the two hardest entries (the tilted plane
-    with two ReLU hidden layers) accept roughly one attempt in eight, and
-    the first acceptable seed for 2-2-2-1 is the 38th. Lowering it leaves
-    holes, which is a reportable failure rather than a silent one.
+    `attempts` has to be this large for the catalog to come out complete.
+    The hardest entry is the tilted plane at 2-4-4-1 with ReLU: eight
+    hidden units fitting a two-parameter plane leaves most of them with
+    nothing to do, so only about one attempt in fifty survives
+    `noDeadUnits` and `noVestigialUnits`, and its first acceptable seed is
+    the 114th. 256 is not that bound plus a rounding -- it is the bound
+    plus room for the acceptance pattern to shift under a different numpy
+    or torch, since at 128 that entry would rest on two seeds. Lowering it
+    leaves holes, which is a reportable failure rather than a silent one.
 
     The objective is the *training* loss, deliberately not the held-out
     loss. The explorer displays both, and choosing the attempt with the

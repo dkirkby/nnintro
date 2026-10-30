@@ -37,6 +37,14 @@ export interface DatasetSpec {
   inputNames: string[];
   targetName: string;
   hasAnalyticTarget: boolean;
+  /**
+   * The generator's own range of targets over the whole domain — the ends of
+   * the output colour scale (`view/colormap.ts`). Null for a classifier,
+   * whose targets are class labels rather than values on the output axis,
+   * and for a generator that declares no range; `outputLimit` says what each
+   * case falls back to.
+   */
+  targetRange: [number, number] | null;
   preprocessing: null;
   samples: DatasetSamples;
 }
@@ -103,6 +111,7 @@ export interface ManifestDataset {
   description: string;
   generatorVersion: number;
   hasAnalyticTarget: boolean;
+  targetRange: [number, number] | null;
   sampleCount: number;
 }
 

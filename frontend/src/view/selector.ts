@@ -7,6 +7,12 @@
  * of buttons would not. Dataset and activation are named rather than
  * ordered, so they are button groups.
  *
+ * Every control keeps its place in the row at every depth: the width
+ * control for a layer that does not exist is disabled rather than removed,
+ * because the depth slider is immediately above them and a row that
+ * reflowed on every depth change would move a control out from under the
+ * pointer that had just used it.
+ *
  * Every stop is checked against the published catalog before it is offered.
  * A combination with no checkpoint is not reachable: its button is
  * disabled, and a slider dragged onto it snaps back and says why. The
@@ -90,18 +96,26 @@ export function createSelector(options: SelectorOptions): Selector {
     return { id: dataset.id, button };
   });
 
+  /**
+   * `widths` grown to `depth` layers, the way deepening does it: a layer
+   * that appears takes the width of the last one that already existed, so
+   * 2–4–1 deepens to 2–4–4–1 rather than jumping to some unrelated default.
+   */
+  function widthsAt(widths: number[], depth: number): number[] {
+    const grown = widths.slice(0, depth);
+    while (grown.length < depth) {
+      grown.push(grown[grown.length - 1] ?? index.widths[0]);
+    }
+    return grown;
+  }
+
   // --- depth and width: ordered, so discrete sliders ---
   const depths = index.depths;
   const depthSlider = stepper("hidden layers", depths.map(String));
   const onDepth = () => {
     const depth = depths[Number(depthSlider.input.value)];
-    // A layer appearing has to be given a width. It inherits the width of
-    // the last layer that already existed, so 2–4–1 deepens to 2–4–4–1
-    // rather than jumping to some unrelated default.
-    const widths = current.widths.slice(0, depth);
-    while (widths.length < depth) {
-      widths.push(widths[widths.length - 1] ?? index.widths[0]);
-    }
+    // A layer appearing has to be given a width: see `widthsAt`.
+    const widths = widthsAt(current.widths, depth);
     request(
       { ...current, widths },
       depth === 1 ? "one hidden layer here" : `${depth} hidden layers here`,
@@ -155,27 +169,33 @@ export function createSelector(options: SelectorOptions): Selector {
 
     depthSlider.set(
       depths.indexOf(depth),
-      depths.map((candidate) => {
-        const widths = selection.widths.slice(0, candidate);
-        while (widths.length < candidate) {
-          widths.push(widths[widths.length - 1] ?? index.widths[0]);
-        }
-        return index.has({ ...selection, widths });
-      }),
+      depths.map((candidate) =>
+        index.has({ ...selection, widths: widthsAt(selection.widths, candidate) }),
+      ),
     );
 
     widthSliders.forEach((slider, layer) => {
-      // A width control for a layer that does not exist is not disabled but
-      // absent: at depth 0 there is no such thing as the width of hidden
-      // layer 1, and a greyed-out slider would imply there is.
-      slider.root.hidden = layer >= depth;
-      if (layer >= depth) return;
+      // A width control for a layer that does not exist is disabled, not
+      // removed: the depth slider sits directly above this row, and a row
+      // that reflowed every time the depth changed would move the control
+      // the reader had just used out from under them.
+      const absent = layer >= depth;
+      slider.root.classList.toggle("is-inert", absent);
+      slider.input.disabled = absent;
+      // What a disabled control shows is the width that layer WOULD get:
+      // deepening inherits the last existing layer's width, so this is a
+      // preview of the next stop up rather than a stale number or a blank.
+      const widths = widthsAt(selection.widths, layer + 1);
       slider.set(
-        index.widths.indexOf(selection.widths[layer]),
+        index.widths.indexOf(widths[layer]),
+        // Nothing is struck through while the control is disabled: the
+        // whole group is already greyed, and marking every stop missing
+        // would claim the catalog lacks them.
         index.widths.map((candidate) => {
-          const widths = selection.widths.slice();
-          widths[layer] = candidate;
-          return index.has({ ...selection, widths });
+          if (absent) return true;
+          const next = selection.widths.slice();
+          next[layer] = candidate;
+          return index.has({ ...selection, widths: next });
         }),
       );
     });

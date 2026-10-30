@@ -15,12 +15,22 @@ import {
   unitParameters,
   writeParameter,
 } from "../src/model/types.js";
+import { niceLimit } from "../src/view/colormap.js";
 import { checkpointNamed, PRIMARY } from "./fixtures.js";
 
 const CHECKPOINT = checkpointNamed(PRIMARY);
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 const PROBE = [0.649, -0.64];
-const LIMIT = 1.5;
+/**
+ * The parameter scale `main.ts` builds for this checkpoint, computed rather
+ * than written down: "every current value is inside the swept range" is an
+ * invariant of that scale, and a hard-coded number only tested it for
+ * whichever parameters happened to be published at the time.
+ */
+const LIMIT = niceLimit(
+  CHECKPOINT.parameters.flatMap((layer) => layer.W.flat()),
+  CHECKPOINT.parameters.flatMap((layer) => layer.b),
+);
 /** The caller names the sweeps now; these tests want all of them. */
 const ALL = parameterRefs(CHECKPOINT.parameters);
 

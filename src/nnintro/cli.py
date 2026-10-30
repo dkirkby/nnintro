@@ -247,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     p_train.add_argument(
         "--attempts",
         type=int,
-        default=96,
+        default=256,
         help="training attempts to curate from (see train.SELECTION_CRITERIA)",
     )
     p_train.add_argument(

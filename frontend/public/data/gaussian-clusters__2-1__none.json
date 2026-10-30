@@ -1,12 +1,12 @@
 {
- "schemaVersion": "0.2.0",
+ "schemaVersion": "0.3.0",
  "checkpointId": "gaussian-clusters__2-1__none",
  "dataset": {
   "id": "gaussian-clusters",
   "label": "Gaussian clusters",
   "task": "classification",
   "description": "two overlapping Gaussian clusters, one per class",
-  "generatorVersion": 1,
+  "generatorVersion": 2,
   "domain": [
    [
     -1.0,
@@ -23,6 +23,7 @@
   ],
   "targetName": "class",
   "hasAnalyticTarget": false,
+  "targetRange": null,
   "preprocessing": null,
   "samples": {
    "x": [
@@ -2494,10 +2495,10 @@
     0.95
    ]
   },
-  "attempts": 96,
+  "attempts": 256,
   "bestTrainLossOverall": 0.14007934452527332,
   "bestTrainLossAccepted": 0.14007934452527332,
-  "accepted_count": 96,
+  "accepted_count": 256,
   "rejected_count": 0,
   "diverged_count": 0,
   "rejected_by": {},
@@ -2705,5 +2706,5 @@
    "pointGradient": null
   }
  ],
- "contentHash": "sha256:89710d2d5f862bcf9cbbbf2809f50e9ecadd64ec7bb202a7ce84d36a0ae2e86a"
+ "contentHash": "sha256:eac2b7d9179e6b24b16feb4807c212751f9273548119d160d7ab32f4f4f483a8"
 }

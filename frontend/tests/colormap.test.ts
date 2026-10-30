@@ -5,7 +5,14 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { createColorScale, gradientBar, niceLimit } from "../src/view/colormap.js";
+import type { DatasetSpec, Task } from "../src/model/types.js";
+import {
+  createColorScale,
+  gradientBar,
+  niceLimit,
+  outputLimit,
+  snugLimit,
+} from "../src/view/colormap.js";
 
 describe("niceLimit", () => {
   it("rounds up to the next round number so colours do not shift underfoot", () => {
@@ -118,5 +125,117 @@ describe("the families", () => {
     expect(gradientBar(scale, -1, 1, "to right")).toBe(
       `linear-gradient(to right, ${scale.stops(-1, 1).join(", ")})`,
     );
+  });
+});
+
+/**
+ * The limit for a scale that cannot shift underfoot.
+ *
+ * `niceLimit`'s ladder is there so a limit computed from the parameters
+ * stays put as they are edited. The output scale is computed from a
+ * dataset's fixed targets, which cannot move, so the ladder would only
+ * spend the scale: the tilted plane's targets used to reach 1.07 and the
+ * ladder rounded that to 1.5, which is why nothing on its map was ever
+ * fully coloured.
+ */
+describe("snugLimit", () => {
+  it("SATURATES AT THE LARGEST VALUE, within two significant digits", () => {
+    expect(snugLimit([1.072467603122828, -0.75])).toBe(1.1);
+    expect(snugLimit([0.9982551740776434])).toBe(1);
+    // The largest MAGNITUDE, either sign, as the scale is diverging.
+    expect(snugLimit([-0.0405, 0.0302])).toBe(0.041);
+    expect(snugLimit([37])).toBe(37);
+    expect(snugLimit([36.2])).toBe(37);
+  });
+
+  it("is never looser than the ladder, and usually tighter", () => {
+    for (const largest of [0.37, 1.072, 1.5, 2.9, 4.01, 12.4]) {
+      expect(snugLimit([largest])).toBeLessThanOrEqual(niceLimit([largest]));
+      expect(snugLimit([largest])).toBeGreaterThanOrEqual(largest);
+    }
+  });
+
+  it("leaves a value that already has two digits alone", () => {
+    // The rounding in the decade itself must not push the limit up a step.
+    for (const exact of [1.1, 0.031, 3.7, 150]) {
+      expect(snugLimit([exact])).toBe(exact);
+    }
+  });
+
+  it("falls back to 1 where every value is zero, as niceLimit does", () => {
+    expect(snugLimit([0, -0])).toBe(1);
+    expect(snugLimit([])).toBe(1);
+    expect(snugLimit([Number.NaN, Number.POSITIVE_INFINITY])).toBe(1);
+  });
+});
+
+/**
+ * Which number is full red: the generator's range of targets, not the
+ * sample's.
+ *
+ * The distinction is the whole reason `dataset.targetRange` is published.
+ * The tilted plane's targets reach 1 at the corner (+1, -1) and 400 uniform
+ * draws do not land on a corner, so a scale fitted to the draw would stop
+ * short of the range the generator actually covers -- and would move if the
+ * sampling seed ever did.
+ */
+describe("outputLimit", () => {
+  /** A dataset spec with only the fields the limit reads filled in. */
+  function datasetOf(
+    task: Task,
+    targetRange: [number, number] | null,
+    y: number[],
+  ): DatasetSpec {
+    return {
+      id: "test-set",
+      label: "Test set",
+      task,
+      description: "a dataset built for this test",
+      generatorVersion: 1,
+      domain: [
+        [-1, 1],
+        [-1, 1],
+      ],
+      inputNames: ["x1", "x2"],
+      targetName: "y",
+      hasAnalyticTarget: targetRange !== null,
+      targetRange,
+      preprocessing: null,
+      samples: { x: y.map(() => [0, 0]), y, isTest: y.map(() => false) },
+    };
+  }
+
+  it("SPANS THE GENERATOR'S RANGE, not the range the samples happened to draw", () => {
+    // The tilted plane's own numbers: the range is [-0.6, 1] and the most
+    // extreme of its 400 samples is 0.902.
+    const dataset = datasetOf("regression", [-0.6, 1], [0.9021074585014741, -0.55]);
+    expect(outputLimit(dataset, 3.7)).toBe(1);
+    // Fitted to the draw instead, the scale would end here -- and the
+    // extreme sample would be the extreme colour of a scale that means
+    // nothing in particular.
+    expect(snugLimit(dataset.samples.y)).toBe(0.91);
+  });
+
+  it("ignores the surface, so an edit cannot move a regression's scale", () => {
+    const dataset = datasetOf("regression", [-1, 1], [0.4]);
+    for (const extent of [0.01, 1, 12, 400]) {
+      expect(outputLimit(dataset, extent)).toBe(1);
+    }
+  });
+
+  it("falls back to the drawn targets where the generator declares no range", () => {
+    // Not every generator has a range to declare: one sampled from measured
+    // data has only the targets it drew, and those are then the only range
+    // there is.
+    const dataset = datasetOf("regression", null, [0.9021074585014741, -0.55]);
+    expect(outputLimit(dataset, 3.7)).toBe(0.91);
+  });
+
+  it("TAKES A CLASSIFIER'S LIMIT FROM THE SURFACE, since 0 and 1 are labels", () => {
+    // Everything a classifier's panels draw is a logit, and its targets are
+    // not on that axis at all, so they must not reach the limit.
+    const dataset = datasetOf("classification", null, [0, 1, 1, 0]);
+    expect(outputLimit(dataset, 4.2)).toBe(5);
+    expect(outputLimit(dataset, 0.4)).toBe(0.5);
   });
 });

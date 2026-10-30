@@ -1,12 +1,12 @@
 {
- "schemaVersion": "0.2.0",
+ "schemaVersion": "0.3.0",
  "checkpointId": "xor-quadrants__2-2-4-1__identity",
  "dataset": {
   "id": "xor-quadrants",
   "label": "XOR quadrants",
   "task": "classification",
   "description": "XOR quadrants: class 1 where the two inputs share a sign",
-  "generatorVersion": 1,
+  "generatorVersion": 2,
   "domain": [
    [
     -1.0,
@@ -23,6 +23,7 @@
   ],
   "targetName": "class",
   "hasAnalyticTarget": false,
+  "targetRange": null,
   "preprocessing": null,
   "samples": {
    "x": [
@@ -2610,15 +2611,15 @@
     0.95
    ]
   },
-  "attempts": 96,
+  "attempts": 256,
   "bestTrainLossOverall": 0.6926920038430332,
   "bestTrainLossAccepted": 0.6926920038430332,
-  "accepted_count": 44,
-  "rejected_count": 52,
+  "accepted_count": 114,
+  "rejected_count": 142,
   "diverged_count": 0,
   "rejected_by": {
-   "noVestigialUnits": 51,
-   "noDeadUnits": 9
+   "noVestigialUnits": 134,
+   "noDeadUnits": 37
   },
   "chosen_init_seed": 8
  },
@@ -3080,5 +3081,5 @@
    "pointGradient": null
   }
  ],
- "contentHash": "sha256:b091aaf351065d14f51af1c43b8d404573f0c847737a3dae5d7041b8b9c2f867"
+ "contentHash": "sha256:cf0be266faac6b193d89dd04f050b150644a287434ce622186c81d2eac495352"
 }

@@ -93,8 +93,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
    is dragged onto -- including the ones the catalog does not cover, which
    are struck through and cannot be selected. */
 .selector-group { display: grid; gap: 4px; align-content: start; }
-/* An explicit `display` outranks the UA stylesheet's [hidden] rule, so the
-   width control for a layer that does not exist needs this to disappear. */
+/* Nothing in this row is hidden any more -- an absent layer's width control
+   is disabled in place -- but an explicit `display` outranks the UA
+   stylesheet's [hidden] rule, so anything that does hide itself needs this. */
 .selector-group[hidden] { display: none; }
 .selector-label {
   font-size: 0.72rem;
@@ -118,6 +119,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
    stays in place rather than disappearing, so the row does not reflow every
    time the depth slider passes zero. */
 .is-inert { opacity: 0.55; }
+/* A width control for a layer that does not exist yet keeps its place in the
+   row rather than vanishing: the depth slider is directly above these, and a
+   control that reflowed the row it sits in would move under the pointer that
+   was still on it. */
+.selector-group.is-inert .stop-slider { cursor: not-allowed; }
 
 /* A panel's explanation, asked for rather than always on. The popup is
    placed beside its panel by view/help.ts, so it never covers it; it is
@@ -255,9 +261,14 @@ h2.has-help { display: flex; align-items: center; justify-content: space-between
 .axis-strip-y span { writing-mode: vertical-rl; transform: rotate(180deg); }
 
 /* Samples carry their target on the output scale, so a dot that vanishes
-   into the surface behind it is one the model already fits. Held-out points
-   are dashed rather than hollow, which would lose that reading. */
+   into the surface behind it is one the model already fits. Training and
+   held-out points are drawn alike: the split is a number in "Prediction and
+   loss", not a glyph. */
 .sample { stroke: var(--ink-dim); stroke-width: 0.8; }
+/* The sample the probe has snapped onto. Drawn larger, over the crosshairs,
+   and ringed in ink -- selection is black everywhere in this app -- so the
+   dot being probed is not the one thing the crosshairs hide. */
+.sample.is-probe { stroke: var(--ink); stroke-width: 1.4; }
 
 /* Parameters -> output: one line per parameter of the selected unit, the
    parameter colour scale as the x axis, and one slider per parameter on that
@@ -335,20 +346,46 @@ h2.has-help { display: flex; align-items: center; justify-content: space-between
    slots does not need the whole column. */
 .tensor-panel { justify-self: start; max-width: 100%; }
 .tensor-map { display: block; max-width: 100%; height: auto; overflow: visible; }
-/* Ink, not --line: the frame has to stay visible over the selection band. */
-.tensor-frame { fill: none; stroke: var(--ink-dim); stroke-opacity: 0.55; stroke-width: 1; }
+/* Ink, not --line: the frame has to stay visible over the selection band.
+   `pointer-events: all` because the frame is unfilled and an unfilled shape
+   is not hit-tested: without it the group's <title> answers a hover only
+   over the slots, and the gaps between them -- most of the rectangle -- say
+   nothing. */
+.tensor-frame {
+  fill: none;
+  stroke: var(--ink-dim);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+  pointer-events: all;
+}
 .tensor-dot { fill: var(--ink-dim); opacity: 0.45; }
 /* Selection is black here too: the band is an ink wash, not a colour that
    could be mistaken for a value on one of the two parameter scales. */
 .tensor-band { fill: var(--ink); fill-opacity: 0.13; }
 .tensor-block { cursor: help; }
 .tensor-caption { font-size: 9px; fill: var(--ink-dim); }
+/* The two row names in the left gutter, rotated a quarter turn. Smaller than
+   the captions because "bias" has to fit across one 18-unit cell. */
+.tensor-axis { font-size: 8px; fill: var(--ink-dim); letter-spacing: -0.02em; }
 
 /* Network */
 .dn-root { width: 100%; height: auto; }
 .dn-edge { cursor: pointer; }
 .dn-node { cursor: pointer; stroke: var(--line); }
-.dn-node-label { font-size: 9px; fill: var(--ink); paint-order: stroke; stroke: var(--surface-2); stroke-width: 2.5px; }
+/* 18 user units, not the 9 this started at: the view box is 680 wide and
+   renders into a panel about that size, so these are roughly CSS pixels and
+   9 of them was a number you had to lean in for. The halo (paint-order) is
+   what lets a label this size stay legible where it overruns its node. */
+.dn-node-label { font-size: 18px; fill: var(--ink); paint-order: stroke; stroke: var(--surface-2); stroke-width: 4px; }
+
+/* The output scale stood up in the right-hand gutter: the axis the output
+   node's own fill came off, with the prediction marked on its left and the
+   probed sample's target on its right. Ink markers rather than coloured
+   ones, so a mark is never the colour of the band it is pointing at. */
+.output-bar-band { stroke: none; }
+.output-bar-frame { fill: none; stroke: var(--line); }
+.output-marker { fill: var(--ink); }
+.output-bar-label { font-size: 12px; fill: var(--ink-dim); }
 
 /* An edge whose value the colour scale cannot show: dotted grey says "too
    small to see here" rather than leaving an invisible line. The rule beats
