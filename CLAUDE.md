@@ -149,6 +149,29 @@ zeroed.
 The display modes now only switch what the **edges** show (weight or
 contribution). Node fills never vary with the mode.
 
+**The network panel has two switches of its own**, over the figure rather
+than in the row at the top, because they are about this one panel:
+`Values` takes the number off every node, and `Parameters` takes away what
+the colours stand for — every edge becomes the same medium grey line, every
+node the same ink disc, and a zero weight is no longer dotted, because
+faintness is a statement about a scale that is not being shown. What is
+left is the shape of the network, which is what a reader meeting it for the
+first time is actually looking at; the two switches then build it back up,
+colours before numbers. With the parameters off the mode buttons have
+nothing to switch, so they are disabled in place. The one thing that cannot
+just be inked over is the selection: an ink ring on an ink disc says
+nothing, so the selected node is turned inside out instead (`.is-plain.is-
+selected` in `styles.css`) and keeps the panel's own colour inside the ring
+it already has. Selection is still black, never the accent.
+
+The diagram is **centred vertically in whatever height the panel has**, and
+never taller than it: `height: auto` sizes it from the width, a
+`max-height` caps it when the panel is short, and the SVG's own
+`preserveAspectRatio` keeps the drawing centred inside that box. The
+centring is `justify-content: safe center`, so a panel smaller than its
+content still shows the top of it rather than clipping it out of reach
+above the scroll.
+
 The output node is the prediction — its fill and its badge — so **the
 output scale stands up beside it**, in a gutter down the right of the
 frame, with the prediction marked by a triangle on its left and the probed

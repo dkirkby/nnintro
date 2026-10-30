@@ -220,6 +220,19 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
 }
 .panel.is-minimised .panel-body, .panel.is-minimised .panel-grip { display: none; }
 
+/* A panel's own display switches, over the figure they act on rather than
+   in the row at the top: they are about this one panel. */
+.panel-toggles {
+  display: flex;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding-bottom: 8px;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+}
+.toggle { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); cursor: pointer; }
+
 /* The resize corner. Two short lines rather than an icon, in the panel's
    own ink, so it reads as part of the frame. */
 .panel-grip {
@@ -417,7 +430,22 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
 .tensor-axis { font-size: 8px; fill: var(--ink-dim); letter-spacing: -0.02em; }
 
 /* Network */
-.dn-root { width: 100%; height: auto; }
+/* The diagram is centred in whatever height the panel has been given, and
+   never larger than it: `height: auto` sizes it from the width, the
+   max-height caps it when the panel is short, and the SVG's own
+   preserveAspectRatio keeps the drawing centred inside that box. `safe`
+   so that a panel smaller than the diagram still shows its top rather than
+   clipping it out of reach above the scroll. */
+.panel-network .panel-body { display: flex; flex-direction: column; }
+.network-figure {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  justify-content: safe center;
+}
+.dn-root { width: 100%; height: auto; max-height: 100%; }
 .dn-edge { cursor: pointer; }
 .dn-node { cursor: pointer; stroke: var(--line); }
 /* 18 user units, not the 9 this started at: the view box is 680 wide and
@@ -446,6 +474,11 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
    A node wears a thick outline of its own; an edge keeps its colour and gets
    a thin outline drawn underneath it (see view/network.ts). */
 .dn-node.is-selected { stroke: var(--ink); stroke-width: 3; }
+/* With the parameters off every node is the same ink, and an ink ring on
+   an ink disc says nothing. The selected unit is turned inside out
+   instead: the panel's own colour inside the ring it already has. The
+   selection is still black, never the accent. */
+.dn-node.is-plain.is-selected { fill: var(--surface); }
 .edge-outline { stroke: var(--ink); stroke-width: 1; }
 .edge-outline.is-faint { stroke-dasharray: 2 3; }
 

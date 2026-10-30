@@ -26,7 +26,12 @@ import { createColorScale, niceLimit, outputLimit, type Palette } from "../src/v
 import { createInputOutputView, type InputOutputView } from "../src/view/inputoutput.js";
 import { createHelp, type Help } from "../src/view/help.js";
 import { createInspector, type Inspector } from "../src/view/inspector.js";
-import { createNetworkView, format, type NetworkView } from "../src/view/network.js";
+import {
+  createNetworkView,
+  format,
+  type NetworkFrame,
+  type NetworkView,
+} from "../src/view/network.js";
 import { createParamSpaceView, type ParamSpaceView } from "../src/view/paramspace.js";
 import { createTensorsView, type TensorsView } from "../src/view/tensors.js";
 import { checkpointNamed, CLASSIFIER, PRIMARY } from "./fixtures.js";
@@ -52,6 +57,22 @@ const PALETTE: Palette = {
   output: createColorScale(outputLimit(CHECKPOINT.dataset, SURFACE.extent), "output"),
 };
 
+/**
+ * The frame `main.ts` hands the network panel, with everything switched
+ * on: the display preferences are the reader's and live in the shell, so
+ * the view is always told all of them.
+ */
+function netFrame(over: Partial<NetworkFrame> = {}): NetworkFrame {
+  return {
+    mode: "weights",
+    palette: PALETTE,
+    showSamples: false,
+    showValues: true,
+    showParameters: true,
+    ...over,
+  };
+}
+
 describe("the network view", () => {
   let container: HTMLElement;
   let explorer: Explorer;
@@ -72,7 +93,7 @@ describe("the network view", () => {
         if (unit) explorer.selectUnit(unit);
       },
     });
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
   });
 
   it("renders one edge per weight and one node per unit", () => {
@@ -86,9 +107,78 @@ describe("the network view", () => {
     expect(container.querySelectorAll(".edge-target")).toHaveLength(expectedEdges);
   });
 
+  /**
+   * The panel's own two switches, which build the figure up rather than
+   * showing all of it at once: the shape of the network, then what the
+   * parameters do to it, then the numbers themselves.
+   */
+  describe("putting the numbers and the parameters away", () => {
+    const edges = () =>
+      Array.from(container.querySelectorAll<SVGElement>('.dn-edge[data-key^="e:"]'));
+    const nodes = () =>
+      Array.from(container.querySelectorAll<SVGElement>('.dn-node[data-key^="n:"]'));
+
+    it("TAKES THE NUMBER OFF EVERY NODE, and touches nothing else", () => {
+      const coloured = nodes().map((node) => node.getAttribute("fill"));
+      expect(container.querySelectorAll(".dn-node-label").length).toBeGreaterThan(0);
+
+      view.render(explorer.snapshot(), netFrame({ showValues: false }));
+      expect(container.querySelectorAll(".dn-node-label")).toHaveLength(0);
+      // The parameters are a separate switch: the colours stay.
+      expect(nodes().map((node) => node.getAttribute("fill"))).toEqual(coloured);
+    });
+
+    it("DRAWS THE SHAPE ALONE with the parameters off", () => {
+      // A zero weight would be dotted grey on the parameter scale; with no
+      // parameter to show there is nothing faint about it.
+      explorer.setParameter(WEIGHT, 0);
+      view.render(explorer.snapshot(), netFrame({ showParameters: false }));
+
+      const widths = new Set(edges().map((edge) => edge.getAttribute("stroke-width")));
+      const strokes = new Set(edges().map((edge) => edge.getAttribute("stroke")));
+      expect(widths.size).toBe(1);
+      expect(strokes).toEqual(new Set(["var(--ink-dim)"]));
+      expect(container.querySelectorAll(".dn-edge.is-faint")).toHaveLength(0);
+      // Every node the same ink, inputs included: nothing here stands for
+      // a number any more.
+      expect(new Set(nodes().map((node) => node.getAttribute("fill")))).toEqual(
+        new Set(["var(--ink)"]),
+      );
+      // The numbers are the other switch, and it is still on.
+      expect(container.querySelectorAll(".dn-node-label").length).toBeGreaterThan(0);
+    });
+
+    it("keeps the selected unit legible once every node is the same ink", () => {
+      explorer.selectUnit(WEIGHT_UNIT);
+      view.render(explorer.snapshot(), netFrame({ showParameters: false }));
+      const node = container.querySelector(`[data-key="n:1:${WEIGHT_UNIT.out}"]`)!;
+      // `is-plain` is what the stylesheet hangs the inside-out selected
+      // node on; the rails along its edges are drawn either way.
+      expect(node.classList.contains("is-plain")).toBe(true);
+      expect(node.classList.contains("is-selected")).toBe(true);
+      expect(container.querySelectorAll(".edge-outline")).toHaveLength(
+        2 * CHECKPOINT.architecture.layerSizes[0],
+      );
+    });
+
+    it("can put both away at once", () => {
+      view.render(
+        explorer.snapshot(),
+        netFrame({ showValues: false, showParameters: false }),
+      );
+      expect(container.querySelectorAll(".dn-node-label")).toHaveLength(0);
+      expect(new Set(edges().map((edge) => edge.getAttribute("stroke")))).toEqual(
+        new Set(["var(--ink-dim)"]),
+      );
+      // Still a network: every node and every edge is there to be clicked.
+      expect(nodes().length).toBeGreaterThan(0);
+      expect(container.querySelectorAll(".edge-target").length).toBe(edges().length);
+    });
+  });
+
   it("GIVES A ZERO-WEIGHT EDGE A VISIBLE, SELECTABLE FORM", () => {
     explorer.setParameter(WEIGHT, 0);
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     const edge = container.querySelector('.dn-edge[data-key="e:0:0:1"]')!;
     // Dotted grey from CSS, since the colour scale has nothing to show.
     expect(edge.classList).toContain("is-faint");
@@ -102,7 +192,7 @@ describe("the network view", () => {
 
   it("RAILS EVERY EDGE INTO THE SELECTED UNIT, leaving each its colour", () => {
     explorer.selectUnit(WEIGHT_UNIT);
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     // One unit, every edge feeding it: two rails each.
     const feeding = CHECKPOINT.architecture.layerSizes[0];
     const rails = Array.from(container.querySelectorAll<SVGLineElement>(".edge-outline"));
@@ -152,7 +242,7 @@ describe("the network view", () => {
     node.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     expect(selected).toEqual({ layer: 0, out: 2 });
 
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     expect(container.querySelector('[data-key="n:1:2"]')!.classList).toContain(
       "is-selected",
     );
@@ -175,7 +265,7 @@ describe("the network view", () => {
     element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     expect(selected).toEqual(edgeUnit({ sourceLayerIndex: 0, targetNodeIndex: 1 }));
 
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     expect(container.querySelector('.dn-edge[data-key="e:0:1:1"]')!.classList).toContain(
       "is-selected",
     );
@@ -236,14 +326,14 @@ describe("the network view", () => {
 
   it("KEEPS THE SELECTION VISIBLE after an edit re-renders the view", () => {
     explorer.selectUnit(WEIGHT_UNIT);
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     const inputs = CHECKPOINT.architecture.layerSizes[0];
     expect(container.querySelector('[data-key="e:0:0:1"]')!.classList).toContain(
       "is-selected",
     );
 
     explorer.setParameter(WEIGHT, 0.5);
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     const stillSelected = container.querySelector('[data-key="e:0:0:1"]');
     expect(stillSelected!.classList).toContain("is-selected");
     // The whole unit, and only it: its node plus one edge per input.
@@ -253,7 +343,7 @@ describe("the network view", () => {
 
   it("shows the edited value, not the checkpoint's", () => {
     explorer.setParameter(WEIGHT, -2.5);
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     const label = container
       .querySelector('[data-key="e:0:0:1"]')!
       .getAttribute("aria-label");
@@ -421,7 +511,7 @@ describe("the network's node colours", () => {
 
   it("FILLS EACH NODE FROM ITS OWN FAMILY's MAP", () => {
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE, false);
+    view.render(snapshot, netFrame());
     const last = CHECKPOINT.architecture.layerSizes.length - 1;
 
     // An input carries no colour: its value is a coordinate, and the
@@ -444,7 +534,7 @@ describe("the network's node colours", () => {
 
   it("still shows the activation as the number on a hidden node", () => {
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE, false);
+    view.render(snapshot, netFrame());
     const hidden = container.querySelector('[data-key="n:1:0"]')!;
     expect(hidden.getAttribute("aria-label")).toContain(
       `activation ${format(snapshot.trace.act[1][0])}`,
@@ -456,9 +546,9 @@ describe("the network's node colours", () => {
 
   it("does not change a node's colour when the edge mode changes", () => {
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE, false);
+    view.render(snapshot, netFrame());
     const before = container.querySelector('[data-key="n:1:0"]')!.getAttribute("fill");
-    view.render(snapshot, "contributions", PALETTE, false);
+    view.render(snapshot, netFrame({ mode: "contributions" }));
     expect(container.querySelector('[data-key="n:1:0"]')!.getAttribute("fill")).toBe(before);
   });
 });
@@ -1450,14 +1540,14 @@ describe("the output bar beside the output node", () => {
     // of a number: a mark with no dot on screen to explain where it came
     // from is worse than no mark.
     expect(explorer.snapshot().target).not.toBeNull();
-    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    view.render(explorer.snapshot(), netFrame({ showSamples: true }));
     expect(container.querySelector(".output-bar")).toBeNull();
 
     explorer.setProbe({ kind: "sample", index: 3 });
-    view.render(explorer.snapshot(), "weights", PALETTE, false);
+    view.render(explorer.snapshot(), netFrame());
     expect(container.querySelector(".output-bar")).toBeNull();
 
-    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    view.render(explorer.snapshot(), netFrame({ showSamples: true }));
     expect(container.querySelector(".output-bar")).not.toBeNull();
     expect(markers(container)).toHaveLength(2);
   });
@@ -1466,7 +1556,7 @@ describe("the output bar beside the output node", () => {
     const { container, explorer, view } = mount(CHECKPOINT);
     explorer.setProbe({ kind: "sample", index: 3 });
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE, true);
+    view.render(snapshot, netFrame({ showSamples: true }));
 
     const bar = frameOf(container);
     const limit = PALETTE.output.limit;
@@ -1493,7 +1583,7 @@ describe("the output bar beside the output node", () => {
   it("names the target marker in rotated text, on the marker's own row", () => {
     const { container, explorer, view } = mount(CHECKPOINT);
     explorer.setProbe({ kind: "sample", index: 3 });
-    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    view.render(explorer.snapshot(), netFrame({ showSamples: true }));
     const label = container.querySelector<SVGElement>(".output-bar-label")!;
     expect(label.textContent).toBe("target");
     const x = Number(label.getAttribute("x"));
@@ -1513,7 +1603,7 @@ describe("the output bar beside the output node", () => {
     // them: the marker can then only say which end it left by.
     explorer.setParameter({ kind: "bias", layer: last, out: 0 }, 20 * PALETTE.output.limit);
     const snapshot = explorer.snapshot();
-    view.render(snapshot, "weights", PALETTE, true);
+    view.render(snapshot, netFrame({ showSamples: true }));
     const bar = frameOf(container);
     const left = markers(container).find((mark) => mark.side === "left")!;
     expect(left.tipY).toBeCloseTo(bar.y, 2);
@@ -1535,12 +1625,12 @@ describe("the output bar beside the output node", () => {
       );
     };
 
-    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    view.render(explorer.snapshot(), netFrame({ showSamples: true }));
     viewBoxes.push(container.querySelector("svg")!.getAttribute("viewBox")!);
     const diagram = rightmost();
 
     explorer.setProbe({ kind: "sample", index: 3 });
-    view.render(explorer.snapshot(), "weights", PALETTE, true);
+    view.render(explorer.snapshot(), netFrame({ showSamples: true }));
     viewBoxes.push(container.querySelector("svg")!.getAttribute("viewBox")!);
     expect(viewBoxes[0]).toBe(viewBoxes[1]);
     expect(rightmost()).toBeCloseTo(diagram, 6);
@@ -1569,12 +1659,12 @@ describe("the output bar beside the output node", () => {
     // A free point in a stochastic classification dataset has no label at
     // all, so there is nothing to mark until the probe is on a sample.
     expect(explorer.snapshot().target).toBeNull();
-    view.render(explorer.snapshot(), "weights", palette, true);
+    view.render(explorer.snapshot(), netFrame({ palette, showSamples: true }));
     expect(container.querySelector(".output-bar")).toBeNull();
 
     const index = classifier.dataset.samples.y.findIndex((y) => y === 1);
     explorer.setProbe({ kind: "sample", index });
-    view.render(explorer.snapshot(), "weights", palette, true);
+    view.render(explorer.snapshot(), netFrame({ palette, showSamples: true }));
     const bar = frameOf(container);
     const right = markers(container).find((mark) => mark.side === "right")!;
     // 0 and 1 are not points on the logit axis the bar spans, so the mark
@@ -1587,7 +1677,7 @@ describe("the output bar beside the output node", () => {
 
     const zero = classifier.dataset.samples.y.findIndex((y) => y === 0);
     explorer.setProbe({ kind: "sample", index: zero });
-    view.render(explorer.snapshot(), "weights", palette, true);
+    view.render(explorer.snapshot(), netFrame({ palette, showSamples: true }));
     const bottom = markers(container).find((mark) => mark.side === "right")!;
     expect(bottom.tipY).toBeCloseTo(bar.y + bar.height, 2);
 
@@ -1658,7 +1748,7 @@ describe("the panels at every selectable shape", () => {
         idPrefix: `t-${id}`,
         onSelect: () => {},
       });
-      view.render(explorer.snapshot(), "weights", PALETTE_FOR(checkpoint, activation), false);
+      view.render(explorer.snapshot(), netFrame({ palette: PALETTE_FOR(checkpoint, activation) }));
       const edges = sizes.slice(1).reduce((total, out, index) => total + out * sizes[index], 0);
       expect(container.querySelectorAll('[data-key^="n:"]')).toHaveLength(
         sizes.reduce((a, b) => a + b, 0),

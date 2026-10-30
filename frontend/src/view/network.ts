@@ -45,11 +45,22 @@ export const DISPLAY_MODES: { id: DisplayMode; label: string; legend: string }[]
   },
 ];
 
+/**
+ * An edge with no parameter to show: one weight looks like another, so
+ * they are all this wide. Mid-way up the ramp below, because the point of
+ * the plain diagram is that nothing on it is carrying a number.
+ */
+const PLAIN_EDGE_WIDTH = 3.6;
+
 /** The half of the legend that does not change with the mode. */
 export const NODE_LEGEND =
   "Node fill: a hidden unit's bias, or ŷ at the output — two different " +
   "colour maps; inputs are unfilled. Node text is always the activation. " +
-  "A dotted grey edge is too small for the scale to show. With the samples " +
+  "A dotted grey edge is too small for the scale to show. The two boxes " +
+  "above put the numbers and the parameters away: with Parameters off the " +
+  "diagram is the shape of the network and nothing else, every edge the " +
+  "same grey and every node the same ink, which is what the edge and node " +
+  "colours are read against. With the samples " +
   "shown and the probe on one of them, the output scale stands up in the " +
   "gutter on the right — the same red/blue scale the map and the slices " +
   "use — marked with the prediction on its left and that sample's target " +
@@ -71,18 +82,32 @@ export interface NetworkViewOptions {
   idPrefix: string;
 }
 
-export interface NetworkView {
+/**
+ * Everything the panel needs that is not the snapshot: the scales, built
+ * once per render by the caller, and the reader's own display preferences,
+ * which live in the shell so that a checkpoint switch does not reset them.
+ */
+export interface NetworkFrame {
+  mode: DisplayMode;
+  palette: Palette;
   /**
-   * The three scales are built once per render by the caller. `showSamples`
-   * is the reader's display preference, which the output bar is gated on
-   * along with the probe actually being a sample: see `outputBar`.
+   * Whether the samples are drawn in the input map. The output bar is
+   * gated on it as well as on the probe being a sample: see `outputBar`.
    */
-  render(
-    snapshot: Snapshot,
-    mode: DisplayMode,
-    palette: Palette,
-    showSamples: boolean,
-  ): void;
+  showSamples: boolean;
+  /** The number on each node, which is always its activation. */
+  showValues: boolean;
+  /**
+   * Whether the parameters are shown at all: edge colour and width, and
+   * the bias a hidden node is filled with. With them off the diagram is
+   * the network's shape and nothing else — plain grey edges, ink nodes —
+   * which is what a reader meeting it for the first time is looking at.
+   */
+  showParameters: boolean;
+}
+
+export interface NetworkView {
+  render(snapshot: Snapshot, frame: NetworkFrame): void;
   svg(): SVGSVGElement;
   destroy(): void;
 }
@@ -162,12 +187,8 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
 
   const lastLayer = layerSizes.length - 1;
 
-  function render(
-    snapshot: Snapshot,
-    mode: DisplayMode,
-    palette: Palette,
-    showSamples: boolean,
-  ): void {
+  function render(snapshot: Snapshot, frame: NetworkFrame): void {
+    const { mode, palette, showSamples, showValues, showParameters } = frame;
     const { parameters, trace, selection } = snapshot;
     /** One unit is selected: its node, and every edge feeding that node. */
     const isSelectedUnit = (unit: UnitRef | null) =>
@@ -183,6 +204,9 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
 
     /** What a node owns, which is not what it displays. */
     function nodeFill(node: NodeRef): string {
+      // With the parameters off, a node is a node: the diagram is the
+      // shape of the network and nothing on it stands for a number.
+      if (!showParameters) return "var(--ink)";
       // An input owns nothing the network chose: its value is a coordinate,
       // and the plot axes carry those. It is left unfilled.
       if (node.layerIndex === 0) return "var(--surface)";
@@ -213,7 +237,11 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
         const selected = isSelectedUnit(nodeUnit(node));
         return {
           fill: nodeFill(node),
-          class: selected ? "is-selected" : "",
+          // `is-plain` is what lets the stylesheet keep the selected unit
+          // legible once every node is the same ink: see styles.css.
+          class: [selected ? "is-selected" : "", showParameters ? "" : "is-plain"]
+            .filter(Boolean)
+            .join(" "),
           "data-key": nodeKey(node),
           tabindex: ref ? "0" : null,
           role: ref ? "button" : null,
@@ -227,12 +255,17 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
         const selected = isSelectedUnit(edgeUnit(edge));
         const scale = mode === "contributions" ? contributionScale : palette.param;
         const value = edge.value ?? 0;
-        const faint = Math.abs(value) < FAINT_FRACTION * scale.limit;
+        // Faintness is a statement about the parameter scale, so there is
+        // nothing faint about an edge drawn without one.
+        const faint =
+          showParameters && Math.abs(value) < FAINT_FRACTION * scale.limit;
         return {
           // A faint edge's colour is overridden in CSS by `.is-faint`, which
           // a presentation attribute cannot outrank.
-          stroke: scale.css(value),
-          "stroke-width": strokeWidth(value, scale.limit).toFixed(2),
+          stroke: showParameters ? scale.css(value) : "var(--ink-dim)",
+          "stroke-width": showParameters
+            ? strokeWidth(value, scale.limit).toFixed(2)
+            : PLAIN_EDGE_WIDTH.toFixed(2),
           class: [selected ? "is-selected" : "", faint ? "is-faint" : ""]
             .filter(Boolean)
             .join(" "),
@@ -245,8 +278,11 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
         };
       },
       // A visible badge, not a tooltip: biases are part of the computation
-      // and hiding them behind a hover makes them look optional.
-      nodeLabel: (node) => (node.value === undefined ? null : format(node.value)),
+      // and hiding them behind a hover makes them look optional. The reader
+      // can still put the numbers away, which is a different thing from
+      // their never having been offered.
+      nodeLabel: (node) =>
+        !showValues || node.value === undefined ? null : format(node.value),
       nodeLabelAttrs: () => ({ class: "dn-node-label" }),
       edgeTitle: (edge) =>
         `${mode === "contributions" ? "contribution" : "weight"} ${format(edge.value)}`,
@@ -265,7 +301,13 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
 
     svg.addEventListener("click", handleActivate);
     svg.addEventListener("keydown", handleKey);
-    decorate(svg, snapshot, mode, mode === "contributions" ? contributionScale : palette.param);
+    decorate(
+      svg,
+      snapshot,
+      mode,
+      mode === "contributions" ? contributionScale : palette.param,
+      showParameters,
+    );
     outputBar(svg, snapshot, palette.output, showSamples);
 
     container.replaceChildren(svg);
@@ -284,6 +326,7 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
     snapshot: Snapshot,
     mode: DisplayMode,
     scale: ColorScale,
+    showParameters: boolean,
   ): void {
     const edges = svg.querySelector(".dn-edges");
     if (!edges) return;
@@ -301,13 +344,17 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
         mode === "contributions"
           ? edgeContribution(parameters, trace.act, edge)
           : edgeWeight(parameters, edge);
-      const faint = Math.abs(value ?? 0) < FAINT_FRACTION * scale.limit;
+      const faint =
+        showParameters && Math.abs(value ?? 0) < FAINT_FRACTION * scale.limit;
 
       if (sameUnit(edgeUnit(edge), selection)) {
         // Two thin rails alongside, rather than one wider line underneath:
         // the edge keeps its own colour and thickness, and the selection
         // reads as an outline instead of a darkened edge.
-        const offset = (strokeWidth(value ?? 0, scale.limit) + OUTLINE_WIDTH) / 2;
+        const drawn = showParameters
+          ? strokeWidth(value ?? 0, scale.limit)
+          : PLAIN_EDGE_WIDTH;
+        const offset = (drawn + OUTLINE_WIDTH) / 2;
         for (const rail of rails(edge, offset)) {
           rail.setAttribute("class", faint ? "edge-outline is-faint" : "edge-outline");
           outlines.append(rail);

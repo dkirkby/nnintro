@@ -88,7 +88,8 @@ const PANELS: PanelSpec[] = [
     rect: { x: 5, y: 0, w: 7, h: 30 },
     limits: { minW: 3, maxW: 12, minH: 10, maxH: 80 },
     body: `
-      <div id="network"></div>
+      <div class="panel-toggles" id="network-toggles"></div>
+      <div class="network-figure" id="network"></div>
       <p class="legend" id="legend"></p>
     `,
   },
@@ -200,11 +201,33 @@ async function start(): Promise<void> {
   // Off to begin with: the panel is there to be probed, and four hundred
   // dots answer the question before the student has asked it.
   let showSamples = false;
+  // Both on: the explorer is about the parameters, so it opens showing
+  // them. They are here to be put away by a reader who wants the shape of
+  // the network on its own, or wants the colours without the numbers over
+  // them — which is why these are the network panel's own controls rather
+  // than part of the row at the top.
+  let showValues = true;
+  let showParameters = true;
 
   let session: Session | null = null;
   let selection: Selection = openingSelection(index);
   /** Which load is the current one: a superseded fetch must not mount. */
   let request = 0;
+
+  buildNetworkToggles(app.querySelector("#network-toggles")!, {
+    setValues: (next) => {
+      showValues = next;
+      session?.render();
+    },
+    setParameters: (next) => {
+      showParameters = next;
+      session?.render();
+      // The display modes only switch what an edge's colour and width
+      // show, so with the parameters off there is nothing for them to
+      // switch: they are disabled in place rather than left live and inert.
+      controls.sync(mode, showSamples, showParameters);
+    },
+  });
 
   const controls = buildControls(app.querySelector("#controls")!, {
     current: () => session?.explorer ?? null,
@@ -404,7 +427,13 @@ async function start(): Promise<void> {
         unitParameters(snapshot.parameters, snapshot.selection),
       );
 
-      networkView.render(snapshot, mode, palette, showSamples);
+      networkView.render(snapshot, {
+        mode,
+        palette,
+        showSamples,
+        showValues,
+        showParameters,
+      });
       tensors.render(snapshot);
       inputOutput.render(snapshot, { surface, slices, palette, showSamples });
       paramSpace.render(snapshot, {
@@ -421,7 +450,7 @@ async function start(): Promise<void> {
         ),
       });
       inspector.render(snapshot, explorer.lastEdit());
-      controls.sync(mode, showSamples);
+      controls.sync(mode, showSamples, showParameters);
       app.querySelector("#provenance")!.textContent = describeProvenance(snapshot.provenance);
       app.querySelector("#subtitle")!.textContent =
         `${dataset.label} · ${dataset.description} · ` +
@@ -545,7 +574,9 @@ interface ControlHandlers {
 function buildControls(
   container: HTMLElement,
   handlers: ControlHandlers,
-): { sync: (mode: DisplayMode, showSamples: boolean) => void } {
+): {
+  sync: (mode: DisplayMode, showSamples: boolean, showParameters: boolean) => void;
+} {
   const modes = document.createElement("div");
   modes.className = "control-group";
   modes.setAttribute("role", "group");
@@ -600,13 +631,53 @@ function buildControls(
   container.replaceChildren(modes, samplesGroup, actions, layout);
 
   return {
-    sync(mode, showSamples) {
+    sync(mode, showSamples, showParameters) {
       for (const entry of modeButtons) {
         entry.button.setAttribute("aria-pressed", String(entry.id === mode));
+        // Nothing to switch while the edges carry no parameter: the group
+        // stays where it is, greyed, rather than disappearing from a row
+        // the reader has just learned the shape of.
+        entry.button.disabled = !showParameters;
       }
+      modes.classList.toggle("is-inert", !showParameters);
       samples.setAttribute("aria-pressed", String(showSamples));
     },
   };
+}
+
+interface ToggleHandlers {
+  setValues: (next: boolean) => void;
+  setParameters: (next: boolean) => void;
+}
+
+/**
+ * The network panel's own two boxes: the numbers on the nodes, and the
+ * parameters the colours stand for.
+ *
+ * They live in the panel rather than in the row at the top because they
+ * are about this one figure, and because the point of them is to build it
+ * up: the shape of the network first, then what the parameters do to it,
+ * then the numbers themselves. Like the other display preferences they
+ * belong to the reader and are held by the shell, so a checkpoint switch
+ * does not quietly turn them back on.
+ */
+function buildNetworkToggles(container: HTMLElement, handlers: ToggleHandlers): void {
+  const boxes: [string, (next: boolean) => void][] = [
+    ["Values", handlers.setValues],
+    ["Parameters", handlers.setParameters],
+  ];
+  container.replaceChildren(
+    ...boxes.map(([name, set]) => {
+      const label = document.createElement("label");
+      label.className = "toggle";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = true;
+      box.addEventListener("change", () => set(box.checked));
+      label.append(box, document.createTextNode(` ${name}`));
+      return label;
+    }),
+  );
 }
 
 void start().catch((error: unknown) => {
