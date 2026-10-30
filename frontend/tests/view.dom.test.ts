@@ -645,14 +645,32 @@ describe("the inspector", () => {
   let container: HTMLElement;
   let explorer: Explorer;
   let inspector: Inspector;
+  /**
+   * The inspector renders into two panel bodies the shell owns, rather
+   * than building its own panels: they are the workspace's, so that
+   * folding or moving one is the reader's arrangement and not something a
+   * checkpoint switch can take away.
+   */
+  let prediction: HTMLElement;
+  let neuronBody: HTMLElement;
+  /** The neuron panel's name lives in its title bar, so it is handed out. */
+  let neuronTitle = "";
 
   beforeEach(() => {
     container = document.createElement("div");
+    prediction = document.createElement("div");
+    neuronBody = document.createElement("div");
+    container.append(prediction, neuronBody);
     document.body.replaceChildren(container);
     explorer = createExplorer(CHECKPOINT);
     explorer.setProbe({ kind: "free", x: [0.649, -0.64] });
+    neuronTitle = "";
     inspector = createInspector({
-      container,
+      prediction,
+      neuron: neuronBody,
+      setNeuronTitle: (title) => {
+        neuronTitle = title;
+      },
       activation: ACTIVATION,
       task: CHECKPOINT.dataset.task,
       targetName: CHECKPOINT.dataset.targetName,
@@ -708,9 +726,9 @@ describe("the inspector", () => {
     return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
   }
 
-  /** The second panel the inspector renders: "Neuron: …". */
+  /** What the inspector rendered into the neuron panel's body. */
   function neuron(): HTMLElement {
-    return container.querySelectorAll<HTMLElement>("section.panel")[1];
+    return neuronBody.querySelector<HTMLElement>(".panel-content")!;
   }
 
   it("TABULATES ONE ROW PER INPUT TERM, and no bias row", () => {
@@ -838,7 +856,9 @@ describe("the inspector", () => {
   it("has no empty state, since the selection is never empty", () => {
     inspector.render(explorer.snapshot(), null);
     expect(container.textContent).not.toContain("Nothing selected");
-    expect(container.textContent).toContain("Neuron:");
+    // The name is the panel's title now, not a heading inside its body.
+    // The explorer opens on the output unit, which here is layer 2.
+    expect(neuronTitle).toBe("Neuron: layer 2, unit 0");
     expect(container.querySelector(".phi-plot")).not.toBeNull();
   });
 
@@ -1087,7 +1107,9 @@ describe("a classifier's panels", () => {
 
   it("READS THE OUTPUT AS A LOGIT, with the probability beside it", () => {
     const inspector = createInspector({
-      container,
+      prediction: container,
+      neuron: document.createElement("div"),
+      setNeuronTitle: () => {},
       activation: CLASSIFIER_ACTIVATION,
       task: "classification",
       targetName: CLASSIFIER_CHECKPOINT.dataset.targetName,
@@ -1675,7 +1697,9 @@ describe("the panels at every selectable shape", () => {
 
     it("WRITES ONE TABLE ROW PER INPUT TERM of the selected neuron", () => {
       const inspector = createInspector({
-        container,
+        prediction: document.createElement("div"),
+        neuron: container,
+        setNeuronTitle: () => {},
         activation,
         task: checkpoint.dataset.task,
         targetName: checkpoint.dataset.targetName,

@@ -24,7 +24,16 @@ const PHI = { size: 150, pad: 12 };
 const PHI_SAMPLES = 81;
 
 export interface InspectorOptions {
-  container: HTMLElement;
+  /** Where "Prediction and loss" goes: a panel body the shell owns. */
+  prediction: HTMLElement;
+  /** Where the neuron's arithmetic goes, likewise. */
+  neuron: HTMLElement;
+  /**
+   * The neuron panel's name changes with the selection, and the name is in
+   * the panel's own title bar rather than inside its body, so the inspector
+   * hands it out rather than printing it.
+   */
+  setNeuronTitle: (title: string) => void;
   activation: Activation;
   task: Task;
   targetName: string;
@@ -117,11 +126,11 @@ function activationPlot(name: Activation, z: number, a: number): SVGElement {
 }
 
 export function createInspector(options: InspectorOptions): Inspector {
-  const { container, activation } = options;
+  const { activation } = options;
 
   function neuronSection(snapshot: Snapshot, selected: UnitRef): HTMLElement {
-    const section = document.createElement("section");
-    section.className = "panel";
+    const section = document.createElement("div");
+    section.className = "panel-content";
     const layer = selected.layer;
     const unit = selected.out;
     const z = snapshot.trace.pre[layer + 1][unit];
@@ -133,9 +142,7 @@ export function createInspector(options: InspectorOptions): Inspector {
     // plot says so by being a straight 45° line through the origin.
     const phi: Activation = isOutput ? "identity" : activation;
 
-    const heading = document.createElement("h3");
-    heading.textContent = `Neuron: layer ${layer + 1}, unit ${unit}`;
-    section.append(heading);
+    options.setNeuronTitle(`Neuron: layer ${layer + 1}, unit ${unit}`);
 
     // The arithmetic on the left, the activation plot on the right when the
     // panel is wide enough for both; it wraps underneath when it is not.
@@ -190,11 +197,8 @@ export function createInspector(options: InspectorOptions): Inspector {
   }
 
   function predictionSection(snapshot: Snapshot, edit: EditRecord | null): HTMLElement {
-    const section = document.createElement("section");
-    section.className = "panel";
-    const heading = document.createElement("h3");
-    heading.textContent = "Prediction and loss";
-    section.append(heading);
+    const section = document.createElement("div");
+    section.className = "panel-content";
 
     // One grid for the lot, each column as wide as its own widest entry:
     // the values line up without being pushed to the far side of the panel.
@@ -289,14 +293,13 @@ export function createInspector(options: InspectorOptions): Inspector {
   return {
     render(snapshot, edit) {
       // Something is always selected, so there is no empty branch here.
-      container.replaceChildren(
-        predictionSection(snapshot, edit),
-        neuronSection(snapshot, snapshot.selection),
-      );
+      options.prediction.replaceChildren(predictionSection(snapshot, edit));
+      options.neuron.replaceChildren(neuronSection(snapshot, snapshot.selection));
     },
 
     destroy() {
-      container.replaceChildren();
+      options.prediction.replaceChildren();
+      options.neuron.replaceChildren();
     },
   };
 }

@@ -128,7 +128,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 /* A panel's explanation, asked for rather than always on. The popup is
    placed beside its panel by view/help.ts, so it never covers it; it is
    fixed, so that placement is against the viewport. */
-h2.has-help { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* The `?` sits next to its panel's name, not at the far end of the bar:
+   the bar's other buttons live there. */
+h2.has-help { display: flex; align-items: center; gap: 8px; }
 .help-button {
   flex: 0 0 auto;
   display: inline-flex;
@@ -159,32 +161,81 @@ h2.has-help { display: flex; align-items: center; justify-content: space-between
 .help-close { padding: 1px 7px; line-height: 1.2; border-radius: 6px; }
 .help-body { margin: 0; }
 
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-.column, .stack { display: grid; gap: 16px; align-content: start; }
-.stack { grid-column: 2; }
-/* Each panel as wide as its own content, not as wide as its neighbour: the
-   neuron panel has a plot beside its table and needs the room; the
-   prediction readouts do not. They wrap when the row runs out. */
-.inspector {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 16px;
-}
-.inspector > .panel { flex: 0 1 auto; min-width: 0; }
+/* The workspace is a canvas the reader arranges, not a fixed grid: twelve
+   columns wide at any window width, rows of a fixed height, and every panel
+   positioned on it by view/workspace.ts. Its own height is set from the
+   layout, because nothing in here is in the flow to give it one. */
+.workspace { position: relative; }
+/* While a panel is being dragged or resized, nothing else should decide it
+   has been clicked, and text should not select under the pointer. */
+.workspace.is-arranging { user-select: none; }
 
 .panel {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 14px;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
 }
+/* Everything settles into its new place; the panel under the pointer does
+   not, or it would lag behind the hand moving it. The reduced-motion rule
+   at the foot of this file turns all of this off. */
+.panel { transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease; }
+.panel.is-dragging, .panel.is-resizing { transition: none; z-index: 3; box-shadow: 0 10px 28px rgb(0 0 0 / 0.22); }
+/* While the workspace is fitting panels to their content it measures them,
+   and a box halfway through a width transition measures at the width it is
+   passing through. */
+.workspace.is-settling .panel { transition: none; }
+
+/* The title bar is the handle: the whole bar, so there is a lot of it to
+   aim at, and the buttons on it stop the drag before it starts. Its height
+   is what a minimised panel is, so it comes from the row grid rather than
+   from a number chosen here (--panel-bar, set by view/workspace.ts). */
+.panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--panel-bar, 36px);
+  flex: 0 0 auto;
+  padding: 0 10px 0 14px;
+  cursor: grab;
+  touch-action: none;
+}
+.panel.is-dragging .panel-bar { cursor: grabbing; }
+.panel-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.panel-bar h2 { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-fold { padding: 1px 7px; line-height: 1.2; border-radius: 6px; }
+
+/* The body scrolls rather than the panel growing: the reader set this
+   height, so content that outgrows it is the reader's business and not a
+   reason to shuffle the whole canvas. */
+.panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 14px 14px;
+}
+.panel.is-minimised .panel-body, .panel.is-minimised .panel-grip { display: none; }
+
+/* The resize corner. Two short lines rather than an icon, in the panel's
+   own ink, so it reads as part of the frame. */
+.panel-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background:
+    linear-gradient(135deg, transparent 50%, var(--ink-dim) 50%, var(--ink-dim) 62%, transparent 62%),
+    linear-gradient(135deg, transparent 72%, var(--ink-dim) 72%, var(--ink-dim) 84%, transparent 84%);
+  opacity: 0.5;
+}
+.panel-grip:hover { opacity: 0.9; }
 
 /* Input -> output. One grid, three plots on shared axes: the square map,
    the slice below it sharing x1, and the slice to its left sharing x2. The
@@ -342,9 +393,6 @@ h2.has-help { display: flex; align-items: center; justify-content: space-between
 
 /* Parameter tensors: shapes, not values. Drawn at its natural size, so the
    slots stay slot-sized however wide the panel is. */
-/* Only as wide as the diagram and its own heading: a schematic of a dozen
-   slots does not need the whole column. */
-.tensor-panel { justify-self: start; max-width: 100%; }
 .tensor-map { display: block; max-width: 100%; height: auto; overflow: visible; }
 /* Ink, not --line: the frame has to stay visible over the selection band.
    `pointer-events: all` because the frame is unfilled and an unfilled shape
@@ -469,10 +517,21 @@ table.contributions th:first-child, table.contributions td:first-child { text-al
 .comparison { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .status { margin-top: 16px; }
 
+/* Too narrow to arrange: twelve columns of 60 pixels is not a canvas, so
+   the panels go back to a single stack and the layout is simply not
+   applied. The declarations are forced because view/workspace.ts writes
+   the layout as inline styles, which a rule cannot otherwise outrank; the
+   stored arrangement is untouched and comes back with the window. */
 @media (max-width: 860px) {
-  .workspace { grid-template-columns: 1fr; }
-  .stack { grid-column: 1; }
-  .inspector > .panel { flex: 1 1 100%; }
+  .workspace { height: auto !important; display: flex; flex-direction: column; gap: 16px; }
+  .panel {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    transition: none;
+  }
+  .panel.is-minimised .panel-body { display: block; }
+  .panel-grip { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

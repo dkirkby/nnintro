@@ -29,6 +29,49 @@ x nineteen variants = 76 checkpoints**, selected by the controls described
 below. `README.md` documents the export schema that joins the two halves and
 the deviations from `PLAN.md`; keep both current when that contract changes.
 
+**The panels are a canvas the reader arranges**, not a fixed grid
+(`view/workspace.ts`, with the geometry in `view/layout.ts`). Each panel is
+a card on twelve columns and rows of 16 pixels: drag it by its title bar,
+resize it from the corner, fold it down to the bar alone with the chevron.
+The point is a figure that can be built up a piece at a time — five views of
+one computation all at once is a wall, and a reader who has just met the
+network diagram can keep the rest minimised until they are wanted. The
+arrangement is the reader's, so it is kept in `localStorage` and
+`Reset layout` puts it back.
+
+Two rules do the arranging, and both are pure functions in `view/layout.ts`:
+**nothing overlaps** (a panel dropped on another pushes it down, and
+whatever that lands on in turn) and **nothing floats** (every panel then
+rises until it meets the one above it, so dragging a panel out of the middle
+closes the hole). Compaction is vertical only: the column is the reader's
+decision and the row is a consequence of it. Which way a displaced panel
+goes is decided by its **centre** against the dragged panel's — a panel
+dragged *onto* another pushes it down, a panel dragged *past* one lets that
+one come up into the room left behind. Without that second case nothing
+could ever be reordered downward, because the dragged panel would simply be
+floated back where it came from. The arrow keys move a panel too, and
+vertically they step past the neighbour rather than by a row, for the same
+reason.
+
+Three things about that module are easy to undo by accident. Compaction
+places panels **in row order**, with the dragged one winning only its own
+row: placing it first instead means a panel resized at the bottom of the
+canvas jumps to the top. Heights are **fitted to content once**, after the
+first render, because a default height is a guess about a window nobody has
+seen and these plots scale with their width; the measurement has to happen
+with the panel transitions suppressed, or a box halfway through a 120ms
+width transition is measured at the width it is passing through. And a
+stored layout is **refused whole** unless it names exactly the panels this
+build has, so adding a panel costs every reader their arrangement once —
+which is the cheapest honest answer for something that is a convenience.
+
+Panels are **shell-owned**, like the help popups and for the same reason:
+a checkpoint switch rebuilds the views, and a panel that went with them
+would take the reader's arrangement with it. The inspector therefore
+renders into two bodies the shell owns rather than building its own
+sections, and hands out the neuron panel's title (which names the selected
+unit) instead of printing a heading inside it.
+
 `main.ts` is in two halves, and the split is what makes a reset honest. The
 **shell** is built once: the panels, the four `?` popups, the catalog
 controls and the display controls. A **session** is built per checkpoint: the
@@ -314,6 +357,9 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   `Palette` per render and hands the same object to both panels.
 - `view/network.ts`, `view/inputoutput.ts`, `view/paramspace.ts`,
   `view/inspector.ts` render a snapshot and own no mathematics.
+- `view/layout.ts` is the workspace's geometry and has no DOM at all, the
+  same split as `model/` against `view/`: what pushes what is arithmetic,
+  and `view/workspace.ts` turns it into elements and gestures.
 
 ### Invariants that are easy to break
 

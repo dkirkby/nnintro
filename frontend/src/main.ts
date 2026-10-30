@@ -43,6 +43,7 @@ import {
 import { createParamSpaceView } from "./view/paramspace.js";
 import { createSelector, describeArchitecture } from "./view/selector.js";
 import { createTensorsView } from "./view/tensors.js";
+import { createWorkspace, type PanelSpec } from "./view/workspace.js";
 
 const SHELL = `
   <header>
@@ -52,44 +53,90 @@ const SHELL = `
   </header>
   <div class="controls" id="catalog"></div>
   <div class="controls" id="controls"></div>
-  <div class="workspace">
-    <div class="column">
-      <section class="panel io-panel">
-        <h2>Inputs → output</h2>
-        <div id="input-output"></div>
-        <p class="legend" id="input-legend"></p>
-      </section>
-      <section class="panel tensor-panel">
-        <h2>Parameter Tensors</h2>
-        <div id="tensors"></div>
-        <p class="legend" id="tensor-legend">
-          Every parameter the network has, as the shapes they are stored in:
-          one group per layer, the bias vector above its weight matrix —
-          the two rows are named in the gutter on the left — and one light
-          dot per value. A column of a group is one unit of the layer it
-          feeds — its bias and the weights into it — so selecting a unit in
-          the network panel shades exactly that band. A row of a weight
-          matrix is one source the layer reads from. Hover anywhere inside a
-          rectangle to see what it is.
-        </p>
-      </section>
-    </div>
-    <div class="stack">
-      <section class="panel network-panel">
-        <h2>Network</h2>
-        <div id="network"></div>
-        <p class="legend" id="legend"></p>
-      </section>
-      <section class="panel param-panel">
-        <h2>Parameters → output</h2>
-        <div id="param-space"></div>
-        <p class="legend" id="param-legend"></p>
-      </section>
-    </div>
-    <div class="inspector" id="inspector"></div>
-  </div>
+  <div id="workspace"></div>
   <p class="status" id="status" role="status" aria-live="polite"></p>
 `;
+
+/**
+ * The panels, and where they sit before anyone moves them.
+ *
+ * The workspace is a canvas the reader arranges (`view/workspace.ts`), so
+ * this is a default rather than a layout: six cards on a twelve-column
+ * grid, laid out as the fixed three columns used to be — the input space
+ * and the tensors down the left, the network and its parameter sweeps on
+ * the right, the inspector along the bottom.
+ *
+ * `limits` is what each panel's content can live with. They are generous
+ * rather than exact: a plot that scales with its box can be read at a wide
+ * range of sizes, and the floor is the width below which its own labels
+ * start colliding.
+ */
+const PANELS: PanelSpec[] = [
+  {
+    id: "inputs",
+    title: "Inputs \u2192 output",
+    rect: { x: 0, y: 0, w: 5, h: 36 },
+    limits: { minW: 3, maxW: 12, minH: 14, maxH: 80 },
+    body: `
+      <div id="input-output"></div>
+      <p class="legend" id="input-legend"></p>
+    `,
+  },
+  {
+    id: "network",
+    title: "Network",
+    rect: { x: 5, y: 0, w: 7, h: 30 },
+    limits: { minW: 3, maxW: 12, minH: 10, maxH: 80 },
+    body: `
+      <div id="network"></div>
+      <p class="legend" id="legend"></p>
+    `,
+  },
+  {
+    id: "params",
+    title: "Parameters \u2192 output",
+    rect: { x: 5, y: 30, w: 7, h: 30 },
+    limits: { minW: 3, maxW: 12, minH: 12, maxH: 80 },
+    body: `
+      <div id="param-space"></div>
+      <p class="legend" id="param-legend"></p>
+    `,
+  },
+  {
+    id: "tensors",
+    title: "Parameter Tensors",
+    rect: { x: 0, y: 36, w: 5, h: 13 },
+    limits: { minW: 2, maxW: 12, minH: 6, maxH: 50 },
+    body: `
+      <div id="tensors"></div>
+      <p class="legend" id="tensor-legend">
+        Every parameter the network has, as the shapes they are stored in:
+        one group per layer, the bias vector above its weight matrix \u2014
+        the two rows are named in the gutter on the left \u2014 and one light
+        dot per value. A column of a group is one unit of the layer it
+        feeds \u2014 its bias and the weights into it \u2014 so selecting a unit
+        in the network panel shades exactly that band. A row of a weight
+        matrix is one source the layer reads from. Hover anywhere inside a
+        rectangle to see what it is.
+      </p>
+    `,
+  },
+  {
+    id: "prediction",
+    title: "Prediction and loss",
+    rect: { x: 0, y: 48, w: 5, h: 16 },
+    limits: { minW: 2, maxW: 12, minH: 6, maxH: 50 },
+    body: `<div id="prediction"></div>`,
+  },
+  {
+    id: "neuron",
+    // Replaced on every render with the unit that is actually selected.
+    title: "Neuron",
+    rect: { x: 5, y: 56, w: 7, h: 20 },
+    limits: { minW: 3, maxW: 12, minH: 8, maxH: 50 },
+    body: `<div id="neuron"></div>`,
+  },
+];
 
 /** One checkpoint's explorer and views: everything a switch replaces. */
 interface Session {
@@ -109,6 +156,20 @@ async function start(): Promise<void> {
 
   app.innerHTML = SHELL;
 
+  // The panels are a canvas the reader arranges rather than a fixed grid:
+  // each one can be folded down to its title bar, dragged anywhere, and
+  // resized, so the explorer can be built up a piece at a time instead of
+  // arriving as a wall of five views. The arrangement is the reader's and
+  // is kept between sessions; `Reset layout` puts it back.
+  //
+  // Shell-owned, like the help popups and for the same reason: a checkpoint
+  // switch rebuilds the views, and a panel that went with them would take
+  // the reader's arrangement with it.
+  const workspace = createWorkspace({
+    container: app.querySelector("#workspace")!,
+    panels: PANELS,
+  });
+
   // Each panel's own explanation, in a popup beside it rather than printed
   // under it: it is a paragraph read once, and it was crowding out the plot
   // it explains. `createHelp` moves the legend element itself, so whatever
@@ -126,12 +187,12 @@ async function start(): Promise<void> {
   };
   const helps: Help[] = (
     [
-      [".io-panel", legends.inputs, "Inputs → output"],
-      [".network-panel", legends.network, "Network"],
-      [".param-panel", legends.params, "Parameters → output"],
-      [".tensor-panel", legends.tensors, "Parameter Tensors"],
+      ["inputs", legends.inputs, "Inputs → output"],
+      ["network", legends.network, "Network"],
+      ["params", legends.params, "Parameters → output"],
+      ["tensors", legends.tensors, "Parameter Tensors"],
     ] as [string, HTMLElement, string][]
-  ).map(([panel, legend, name]) => createHelp(app.querySelector(panel)!, legend, name));
+  ).map(([panel, legend, name]) => createHelp(workspace.panel(panel), legend, name));
 
   // Display preferences, as opposed to model state: they belong to the
   // reader rather than to the checkpoint, so they survive a switch.
@@ -154,6 +215,10 @@ async function start(): Promise<void> {
     toggleSamples: () => {
       showSamples = !showSamples;
       session?.render();
+    },
+    resetLayout: () => {
+      workspace.reset();
+      setStatus(app, `Layout reset: every panel expanded and back where it started. ${RESET_HINT}`);
     },
   });
 
@@ -265,7 +330,9 @@ async function start(): Promise<void> {
       onProbe: (probe) => explorer.setProbe(probe),
     });
     const inspector = createInspector({
-      container: app.querySelector("#inspector")!,
+      prediction: app.querySelector("#prediction")!,
+      neuron: app.querySelector("#neuron")!,
+      setNeuronTitle: (title) => workspace.setTitle("neuron", title),
       activation,
       task: dataset.task,
       targetName: dataset.targetName,
@@ -421,6 +488,12 @@ async function start(): Promise<void> {
   });
 
   await choose(selection);
+  // A default height is a guess about a window nobody has seen, and these
+  // plots scale with their width: the same panel is taller on a wide
+  // screen. Now that the views have drawn, each panel takes the height its
+  // own content asks for. An arrangement restored from a previous session
+  // is the reader's own and is left exactly as they left it.
+  if (!workspace.isRestored()) workspace.fit();
 }
 
 /** Standing instructions, printed under the panels and never updated. */
@@ -460,6 +533,8 @@ interface ControlHandlers {
   current: () => Explorer | null;
   setMode: (mode: DisplayMode) => void;
   toggleSamples: () => void;
+  /** Back to every panel expanded and where it shipped. */
+  resetLayout: () => void;
 }
 
 /**
@@ -511,7 +586,18 @@ function buildControls(
     });
     actions.append(button);
   }
-  container.replaceChildren(modes, samplesGroup, actions);
+  // The layout is the reader's, not the model's, so its control sits apart
+  // from the ones that act on parameters.
+  const layout = document.createElement("div");
+  layout.className = "control-group";
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.textContent = "Reset layout";
+  reset.title = "Expand every panel and put it back where it started";
+  reset.addEventListener("click", () => handlers.resetLayout());
+  layout.append(reset);
+
+  container.replaceChildren(modes, samplesGroup, actions, layout);
 
   return {
     sync(mode, showSamples) {

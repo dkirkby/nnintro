@@ -175,6 +175,15 @@ derivative against centered finite differences.
   `tests/test_datasets.py` pins it.
   `GENERATOR_VERSION` went to 2 at the same time, so a checkpoint built
   against the old formula is identifiable rather than silently mixed in.
+- **The panels are a canvas the reader arranges**, where PLAN.md section 4
+  asks for "three coordinated areas". The three areas are still the default
+  arrangement, but each panel can be folded down to its title bar, dragged
+  anywhere on a twelve-column grid, and resized within what its content can
+  live with; the layout is kept between sessions and `Reset layout` restores
+  the default. The point is that the figure can be built up a piece at a
+  time rather than arriving as five views at once. The plan's requirement
+  for narrow screens is unchanged: below 860px the panels stack and the
+  stored arrangement is simply not applied.
 - **Training and held-out samples are drawn alike on the map.** The split is
   a number in "Prediction and loss", not a glyph to decode: the two
   regression generators are noiseless, so their splits cannot differ, and the
