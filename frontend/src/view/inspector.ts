@@ -12,7 +12,7 @@
  */
 
 import { activationDerivative, applyActivation } from "../model/evaluate.js";
-import type { Activation, UnitRef } from "../model/types.js";
+import type { Activation, Task, UnitRef } from "../model/types.js";
 import type { EditRecord, Snapshot } from "../state.js";
 import { niceLimit } from "./colormap.js";
 import { format } from "./network.js";
@@ -26,12 +26,14 @@ const PHI_SAMPLES = 81;
 export interface InspectorOptions {
   container: HTMLElement;
   activation: Activation;
+  task: Task;
   targetName: string;
   inputNames: string[];
 }
 
 export interface Inspector {
   render(snapshot: Snapshot, edit: EditRecord | null): void;
+  destroy(): void;
 }
 
 function row(label: string, value: string, hint?: string): HTMLElement {
@@ -198,20 +200,53 @@ export function createInspector(options: InspectorOptions): Inspector {
     // the values line up without being pushed to the far side of the panel.
     const readouts = document.createElement("div");
     readouts.className = "readouts";
+    const isClassifier = options.task === "classification";
     readouts.append(
-      row("prediction ŷ", format(snapshot.trace.output)),
+      // For a classifier the network's scalar output is a logit, never a
+      // probability: sigmoid is applied for display and the logit stays
+      // visible beside it, because the logit is what the parameters
+      // actually produce and what every other panel plots (PLAN.md
+      // section 3).
       row(
-        "target y",
+        isClassifier ? "logit z" : "prediction ŷ",
+        format(snapshot.trace.output),
+      ),
+      ...(snapshot.probability === null
+        ? []
+        : [
+            row(
+              "probability p",
+              format(snapshot.probability),
+              "σ(z), the class-1 probability; z = 0 is p = 0.5",
+            ),
+          ]),
+      row(
+        isClassifier ? "class y" : "target y",
         snapshot.target === null ? "—" : format(snapshot.target),
         snapshot.target === null
           ? "this point has no defined target, so it has no loss"
           : undefined,
       ),
       row("point loss ℓ", format(snapshot.pointLoss)),
+      // A classifier's sensitivity defaults to the probability's, with the
+      // logit's kept beside it and labeled: dp/dx is the quantity a reader
+      // can judge, and dz/dx is the one the chain rule produced (PLAN.md
+      // section 3).
+      ...(snapshot.probabilitySensitivity === null
+        ? []
+        : [
+            row(
+              "∂p/∂x",
+              snapshot.probabilitySensitivity.map(format).join(",  "),
+              `with respect to ${options.inputNames.join(" and ")}`,
+            ),
+          ]),
       row(
-        "∂ŷ/∂x",
+        isClassifier ? "∂z/∂x" : "∂ŷ/∂x",
         snapshot.inputSensitivity.map(format).join(",  "),
-        `with respect to ${options.inputNames.join(" and ")}`,
+        isClassifier
+          ? "the logit's own sensitivity, before σ"
+          : `with respect to ${options.inputNames.join(" and ")}`,
       ),
       row("mean loss L (train)", format(snapshot.train.meanLoss)),
       row("mean loss L (held out)", format(snapshot.test.meanLoss)),
@@ -258,6 +293,10 @@ export function createInspector(options: InspectorOptions): Inspector {
         predictionSection(snapshot, edit),
         neuronSection(snapshot, snapshot.selection),
       );
+    },
+
+    destroy() {
+      container.replaceChildren();
     },
   };
 }

@@ -83,8 +83,41 @@ button {
   color: var(--ink);
   cursor: pointer;
 }
-button:hover { border-color: var(--accent); }
+button:hover:not(:disabled) { border-color: var(--accent); }
 button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* The catalog controls: which dataset, how deep, how wide, which hidden
+   activation. Depth and width are discrete sliders with every stop written
+   out beneath them (PLAN.md section 3), so the stops are legible before one
+   is dragged onto -- including the ones the catalog does not cover, which
+   are struck through and cannot be selected. */
+.selector-group { display: grid; gap: 4px; align-content: start; }
+/* An explicit `display` outranks the UA stylesheet's [hidden] rule, so the
+   width control for a layer that does not exist needs this to disappear. */
+.selector-group[hidden] { display: none; }
+.selector-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.stop-track { display: grid; gap: 1px; min-width: 96px; }
+.stop-slider { width: 100%; margin: 0; accent-color: var(--accent); }
+.stop-slider:disabled { opacity: 0.4; }
+/* One column per stop, so each label sits under its own notch. The first
+   and last are pulled inward because a range thumb's travel stops half a
+   thumb short of each end of the track. */
+.stop-scale { display: grid; font-size: 0.75rem; color: var(--ink-dim); }
+.stop-mark { text-align: center; }
+.stop-mark:first-child { text-align: left; }
+.stop-mark:last-child { text-align: right; }
+.stop-mark.is-current { color: var(--ink); font-weight: 600; }
+.stop-mark.stop-missing { text-decoration: line-through; opacity: 0.5; }
+/* With no hidden layer there is no hidden activation to choose. The group
+   stays in place rather than disappearing, so the row does not reflow every
+   time the depth slider passes zero. */
+.is-inert { opacity: 0.55; }
 
 /* A panel's explanation, asked for rather than always on. The popup is
    placed beside its panel by view/help.ts, so it never covers it; it is
@@ -225,7 +258,6 @@ h2.has-help { display: flex; align-items: center; justify-content: space-between
    into the surface behind it is one the model already fits. Held-out points
    are dashed rather than hollow, which would lose that reading. */
 .sample { stroke: var(--ink-dim); stroke-width: 0.8; }
-.sample.is-test { stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 2 2; }
 
 /* Parameters -> output: one line per parameter of the selected unit, the
    parameter colour scale as the x axis, and one slider per parameter on that

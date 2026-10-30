@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -18,48 +20,112 @@ from .export import (
     publish,
     write_checkpoint,
 )
-from .model import DenseNet, mean_loss
+from .model import ACTIVATIONS, DenseNet, mean_loss
 from .train import TrainConfig, curate
 
-# The Stage 0 spike trains one variant. Stage 1 grows this to the full
-# catalog of PLAN.md section 3; every entry a UI control can reach must
-# appear here, which is what `verify` checks against the manifest.
-CATALOG = [
-    {"dataset": "tilted-plane", "sizes": [2, 4, 1], "activation": "relu"},
+# The architecture family of PLAN.md section 3: hidden depth 0, 1 or 2 and
+# each hidden width 2 or 4, which is seven architectures.
+HIDDEN_WIDTHS = (2, 4)
+ARCHITECTURES: list[list[int]] = [
+    [2, 1],
+    *([2, w, 1] for w in HIDDEN_WIDTHS),
+    *([2, a, b, 1] for a in HIDDEN_WIDTHS for b in HIDDEN_WIDTHS),
 ]
+
+
+def build_catalog() -> list[dict]:
+    """Every configuration the UI controls can select: 4 x 19 = 76 entries.
+
+    Generated rather than written out, because the controls enumerate the
+    same product and a hand-maintained list would drift from them. A network
+    with no hidden layer has no hidden activation to vary, so it contributes
+    one entry rather than three: 1 + 2x3 + 4x3 = 19 per dataset.
+    """
+    entries = []
+    for dataset in datasets.BUILDERS:
+        for sizes in ARCHITECTURES:
+            activations = ACTIVATIONS if len(sizes) > 2 else ("identity",)
+            for activation in activations:
+                entries.append(
+                    {"dataset": dataset, "sizes": sizes, "activation": activation}
+                )
+    return entries
+
+
+CATALOG = build_catalog()
 
 DATA_DIR = Path("data")
 SNAPSHOT_DIR = Path("frontend/public/data")
 
 
-def _build_all(outdir: Path, steps: int | None, attempts: int) -> list[dict]:
-    payloads = []
-    for entry in CATALOG:
-        dataset = datasets.build(entry["dataset"])
-        config = TrainConfig(
-            sizes=entry["sizes"],
-            activation=entry["activation"],
-            **({"steps": steps} if steps else {}),
-        )
+def _build_one(entry: dict, steps: int | None, attempts: int) -> dict:
+    """Curate and export one catalog entry, in its own process.
+
+    Returns a record rather than raising: one configuration that cannot be
+    curated is a gap in the catalog, which the caller reports and the UI
+    disables, not a reason to abandon the other seventy-five.
+    """
+    # One thread per worker: these are 2x4 matmuls, so torch's intra-op
+    # threads cost more in coordination than the arithmetic they split, and
+    # they fight the process pool for the same cores.
+    torch.set_num_threads(1)
+    dataset = datasets.build(entry["dataset"])
+    config = TrainConfig(
+        sizes=entry["sizes"],
+        activation=entry["activation"],
+        **({"steps": steps} if steps else {}),
+    )
+    name = checkpoint_id(entry["dataset"], entry["sizes"], entry["activation"])
+    try:
         result, selection = curate(dataset, config, attempts=attempts)
-        payload = build_checkpoint(result, dataset, selection)
-        path = write_checkpoint(payload, outdir)
-        print(
-            f"{payload['checkpointId']}: "
+    except RuntimeError as error:
+        return {"checkpointId": name, "payload": None, "error": str(error)}
+    payload = build_checkpoint(result, dataset, selection)
+    return {
+        "checkpointId": name,
+        "payload": payload,
+        "error": None,
+        "summary": (
             f"train {result.train_loss:.3e}  test {result.test_loss:.3e}  "
             f"(seed {selection['chosen_init_seed']}, "
-            f"{selection['accepted_count']}/{selection['attempts']} accepted) -> {path}"
-        )
-        payloads.append(payload)
+            f"{selection['accepted_count']}/{selection['attempts']} accepted)"
+        ),
+    }
+
+
+def _build_all(
+    outdir: Path, steps: int | None, attempts: int, workers: int
+) -> tuple[list[dict], list[dict]]:
+    payloads: list[dict] = []
+    gaps: list[dict] = []
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_build_one, entry, steps, attempts) for entry in CATALOG]
+        for index, future in enumerate(futures, start=1):
+            record = future.result()
+            name = record["checkpointId"]
+            if record["error"]:
+                gaps.append(record)
+                print(f"[{index}/{len(CATALOG)}] GAP {name}: {record['error']}")
+                continue
+            path = write_checkpoint(record["payload"], outdir)
+            payloads.append(record["payload"])
+            print(f"[{index}/{len(CATALOG)}] {name}: {record['summary']} -> {path}")
+
     manifest = build_manifest(payloads)
     (outdir / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     print(f"manifest: {len(payloads)} checkpoint(s) -> {outdir / 'manifest.json'}")
-    return payloads
+    if gaps:
+        print(f"{len(gaps)} configuration(s) have no checkpoint:")
+        for record in gaps:
+            print(f"  {record['checkpointId']}")
+    return payloads, gaps
 
 
 def cmd_train(args: argparse.Namespace) -> int:
-    _build_all(Path(args.outdir), args.steps, args.attempts)
-    return 0
+    _, gaps = _build_all(Path(args.outdir), args.steps, args.attempts, args.workers)
+    # A gap is reportable: the controls must then disable that stop, and a
+    # silent zero exit would let one slip into a published snapshot.
+    return 1 if gaps else 0
 
 
 def cmd_publish(args: argparse.Namespace) -> int:
@@ -86,6 +152,26 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if listed != present:
         print(f"FAIL manifest/file mismatch: {listed ^ present}")
         return 1
+    # The frontend reads the manifest's `datasets` array to label and group
+    # its dataset control, so every dataset a checkpoint names has to appear
+    # there: a missing entry makes that dataset unselectable.
+    described = {entry["id"] for entry in manifest.get("datasets", [])}
+    used = {entry["dataset"] for entry in manifest["checkpoints"]}
+    if described != used:
+        print(f"FAIL manifest datasets do not cover its checkpoints: {described ^ used}")
+        return 1
+    # Catalog coverage, which PLAN.md section 11 asks to be checked
+    # automatically before assets are published: every combination the
+    # controls enumerate must be here, because the controls offer exactly
+    # the product the catalog defines and a missing one disables a stop.
+    expected = {
+        checkpoint_id(entry["dataset"], entry["sizes"], entry["activation"])
+        for entry in build_catalog()
+    }
+    if not expected <= listed:
+        print(f"FAIL catalog is not covered; missing: {sorted(expected - listed)}")
+        return 1
+    print(f"catalog covered: {len(expected)} configuration(s)")
 
     failures = 0
     for entry in manifest["checkpoints"]:
@@ -161,8 +247,19 @@ def main(argv: list[str] | None = None) -> int:
     p_train.add_argument(
         "--attempts",
         type=int,
-        default=24,
+        default=96,
         help="training attempts to curate from (see train.SELECTION_CRITERIA)",
+    )
+    p_train.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) - 2),
+        help="catalog entries to curate in parallel",
+    )
+    p_train.add_argument(
+        "--only",
+        default=None,
+        help="restrict to catalog entries whose id contains this substring",
     )
     p_train.set_defaults(func=cmd_train)
 
@@ -178,4 +275,15 @@ def main(argv: list[str] | None = None) -> int:
     p_verify.set_defaults(func=cmd_verify)
 
     args = parser.parse_args(argv)
+    if getattr(args, "only", None):
+        global CATALOG
+        CATALOG = [
+            entry
+            for entry in CATALOG
+            if args.only
+            in checkpoint_id(entry["dataset"], entry["sizes"], entry["activation"])
+        ]
+        if not CATALOG:
+            print(f"no catalog entry matches {args.only!r}")
+            return 1
     return args.func(args)

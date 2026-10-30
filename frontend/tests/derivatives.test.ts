@@ -46,7 +46,14 @@ describe.each(allCheckpoints())("$checkpointId", (checkpoint) => {
           (forward(parameters, activation, hi).output -
             forward(parameters, activation, lo).output) /
           (2 * h);
-        expect(numeric).toBeCloseTo(analytic[axis], 6);
+        // Scale-aware, like the gradient checks below. A confident
+        // classifier's logit sensitivity runs into the hundreds, and a
+        // centered difference of a value that size cannot be held to 5e-7
+        // absolute — the catalog's steepest case misses it by 6e-7 while
+        // agreeing to 2 parts in 1e9.
+        expect(Math.abs(numeric - analytic[axis])).toBeLessThan(
+          1e-5 * Math.max(1, Math.abs(analytic[axis])),
+        );
       });
     }
     expect(checked).toBeGreaterThan(0);
@@ -98,12 +105,20 @@ describe.each(allCheckpoints())("$checkpointId", (checkpoint) => {
   it("mean-loss gradients match centered finite differences", () => {
     const h = 1e-7;
     const base = splitObjective(parameters, activation, task, dataset.samples, "train");
+    // Derived from the shape rather than written out: the catalog has a
+    // 2 -> 1 network whose first layer has a single destination unit, so a
+    // hard-coded `out: 1` indexes past the end of it.
+    const last = parameters.length - 1;
+    const firstOut = parameters[0].b.length - 1;
+    const firstIn = parameters[0].W[0].length - 1;
     const refs: ParameterRef[] = [
       { kind: "weight", layer: 0, out: 0, in: 0 },
-      { kind: "weight", layer: 0, out: 1, in: 1 },
+      // The far corner of the first layer, so the check is asymmetric
+      // wherever the shape allows it to be.
+      { kind: "weight", layer: 0, out: firstOut, in: firstIn },
       { kind: "bias", layer: 0, out: 0 },
-      { kind: "weight", layer: parameters.length - 1, out: 0, in: 0 },
-      { kind: "bias", layer: parameters.length - 1, out: 0 },
+      { kind: "weight", layer: last, out: 0, in: 0 },
+      { kind: "bias", layer: last, out: 0 },
     ];
     for (const ref of refs) {
       const current =

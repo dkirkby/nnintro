@@ -29,9 +29,9 @@ import { createInspector, type Inspector } from "../src/view/inspector.js";
 import { createNetworkView, format, type NetworkView } from "../src/view/network.js";
 import { createParamSpaceView, type ParamSpaceView } from "../src/view/paramspace.js";
 import { createTensorsView, type TensorsView } from "../src/view/tensors.js";
-import { loadCheckpoint, loadManifest } from "./fixtures.js";
+import { checkpointNamed, CLASSIFIER, PRIMARY } from "./fixtures.js";
 
-const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
+const CHECKPOINT = checkpointNamed(PRIMARY);
 const WEIGHT: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
 /** Hidden unit 1: what a click on that weight's edge now selects. */
 const WEIGHT_UNIT: UnitRef = unitOf(WEIGHT);
@@ -497,6 +497,8 @@ describe("the parameters → output panel", () => {
     edited = null;
     view = createParamSpaceView({
       container,
+      legend: document.createElement("p"),
+      outputName: "ŷ",
       onEdit: (ref, value) => {
         edited = [ref, value];
         explorer.setParameter(ref, value);
@@ -651,10 +653,29 @@ describe("the inspector", () => {
     inspector = createInspector({
       container,
       activation: ACTIVATION,
+      task: CHECKPOINT.dataset.task,
       targetName: CHECKPOINT.dataset.targetName,
       inputNames: CHECKPOINT.dataset.inputNames,
     });
   });
+
+  /**
+   * The plot's half-range, read off the `+N` tick it draws. The axis is
+   * fitted to the unit's own z, so this is not a constant.
+   */
+  function axisLimit(): number {
+    const ticks = Array.from(container.querySelectorAll(".phi-plot .slice-tick"));
+    const positive = ticks.find((tick) => tick.textContent?.startsWith("+"))!;
+    return Number(positive.textContent!.slice(1));
+  }
+
+  /** Where the dot stands on the z axis, inverting the plot's own mapping. */
+  function dotZ(): number {
+    // PHI = { size: 150, pad: 12 } in view/inspector.ts.
+    const span = 150 - 2 * 12;
+    const limit = axisLimit();
+    return ((dot().x - 12) / span) * 2 * limit - limit;
+  }
 
   /** The activation plot's polyline, as (x, y) pairs in its own user units. */
   function curve(): [number, number][] {
@@ -770,17 +791,29 @@ describe("the inspector", () => {
   it("MOVES THE DOT ALONG THE CURVE when the bias changes", () => {
     explorer.selectUnit(WEIGHT_UNIT);
     inspector.render(explorer.snapshot(), null);
-    const before = dot();
+    const before = { z: dotZ() };
 
     const bias = explorer.snapshot().parameters[0].b[WEIGHT_UNIT.out];
     explorer.setParameter({ kind: "bias", layer: 0, out: WEIGHT_UNIT.out }, bias + 0.4);
     inspector.render(explorer.snapshot(), explorer.lastEdit());
-    const after = dot();
+    const after = { z: dotZ() };
 
-    // A larger bias is a larger z, so the dot slides to the right — and it
-    // is still a point of the function, which the bias does not change.
-    expect(after.x).toBeGreaterThan(before.x);
-    expect(after.y).toBeCloseTo(curveAt(after.x), 1);
+    // z = Σ wᵢaᵢ + b, so a bias edit moves the dot along the z axis by
+    // exactly the edit: this is the arithmetic and the plot agreeing.
+    //
+    // Deliberately read in z rather than in pixels. The axis is fitted to
+    // the magnitude of this unit's own z, so an edit can widen the frame by
+    // outgrowing a ladder stop *or* narrow it by moving z toward zero —
+    // which is what the published checkpoint does here, 1.5 down to 1. The
+    // dot then sits at a smaller pixel x while standing at a larger z, so a
+    // pixel assertion would only be a statement about which checkpoint
+    // happens to be published.
+    // To two decimals: the dot's cx is written with toFixed(2), so reading
+    // z back out of it cannot be sharper than that rounding.
+    expect(after.z - before.z).toBeCloseTo(0.4, 2);
+    // And it is still a point of the function, which the bias does not move.
+    const here = dot();
+    expect(here.y).toBeCloseTo(curveAt(here.x), 1);
   });
 
   it("draws the output unit's identity, since that layer has no nonlinearity", () => {
@@ -967,3 +1000,291 @@ describe("the parameter tensors panel", () => {
     expect(Number(bands()[0].getAttribute("x"))).toBeCloseTo(before + width, 6);
   });
 });
+
+/**
+ * A classifier's output is a logit, and the panels have to say so.
+ *
+ * The network's scalar output is never a probability: sigmoid is applied for
+ * display and labeled, and the logit stays visible beside it because the
+ * logit is what the parameters produce and what every plot draws (PLAN.md
+ * section 3). The one thing that cannot be left on the logit axis is the
+ * target, which is a class label.
+ */
+describe("a classifier's panels", () => {
+  const CLASSIFIER_CHECKPOINT = checkpointNamed(CLASSIFIER);
+  const CLASSIFIER_ACTIVATION = CLASSIFIER_CHECKPOINT.architecture.hiddenActivation!;
+  const CLASSIFIER_SURFACE = outputSurface(
+    CLASSIFIER_CHECKPOINT.parameters,
+    CLASSIFIER_ACTIVATION,
+    CLASSIFIER_CHECKPOINT.dataset.domain,
+    12,
+  );
+  // The targets are deliberately NOT in this limit: 0 and 1 are class
+  // labels, not points on the logit axis the surface spans.
+  const CLASSIFIER_PALETTE: Palette = {
+    param: createColorScale(
+      niceLimit(
+        CLASSIFIER_CHECKPOINT.parameters.flatMap((layer) => layer.W.flat()),
+        CLASSIFIER_CHECKPOINT.parameters.flatMap((layer) => layer.b),
+      ),
+      "param",
+    ),
+    output: createColorScale(niceLimit([CLASSIFIER_SURFACE.extent]), "output"),
+  };
+
+  let container: HTMLElement;
+  let explorer: Explorer;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.replaceChildren(container);
+    explorer = createExplorer(CLASSIFIER_CHECKPOINT);
+    explorer.setProbe({ kind: "sample", index: 0 });
+  });
+
+  it("IS A CLASSIFIER AT ALL, with a logit and no analytic target", () => {
+    expect(CLASSIFIER_CHECKPOINT.dataset.task).toBe("classification");
+    expect(CLASSIFIER_CHECKPOINT.architecture.outputTransform).toBe("sigmoid");
+    expect(CLASSIFIER_CHECKPOINT.dataset.hasAnalyticTarget).toBe(false);
+  });
+
+  it("READS THE OUTPUT AS A LOGIT, with the probability beside it", () => {
+    const inspector = createInspector({
+      container,
+      activation: CLASSIFIER_ACTIVATION,
+      task: "classification",
+      targetName: CLASSIFIER_CHECKPOINT.dataset.targetName,
+      inputNames: CLASSIFIER_CHECKPOINT.dataset.inputNames,
+    });
+    inspector.render(explorer.snapshot(), null);
+    const labels = Array.from(container.querySelectorAll(".row-label")).map(
+      (element) => element.textContent,
+    );
+    expect(labels).toContain("logit z");
+    expect(labels).toContain("probability p");
+    expect(labels).not.toContain("prediction ŷ");
+
+    // The two numbers are one sigmoid apart, and the probability is the one
+    // the sensitivity defaults to.
+    const snapshot = explorer.snapshot();
+    expect(snapshot.probability).toBeCloseTo(
+      1 / (1 + Math.exp(-snapshot.trace.output)),
+      12,
+    );
+    expect(labels).toContain("∂p/∂x");
+    expect(labels).toContain("∂z/∂x");
+  });
+
+  it("DRAWS A CLASS LABEL AT THE END OF THE SCALE, not at its own value", () => {
+    const view = createInputOutputView({
+      container,
+      dataset: CLASSIFIER_CHECKPOINT.dataset,
+      onProbe: () => {},
+    });
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, {
+      surface: CLASSIFIER_SURFACE,
+      slices: CLASSIFIER_CHECKPOINT.dataset.domain.map((_, axis) =>
+        outputSlice(
+          snapshot.parameters,
+          CLASSIFIER_ACTIVATION,
+          CLASSIFIER_CHECKPOINT.dataset.domain,
+          snapshot.x,
+          axis,
+        ),
+      ),
+      palette: CLASSIFIER_PALETTE,
+      showSamples: true,
+    });
+
+    const limit = CLASSIFIER_PALETTE.output.limit;
+    const ends = [
+      CLASSIFIER_PALETTE.output.css(-limit),
+      CLASSIFIER_PALETTE.output.css(limit),
+    ];
+    const fills = new Set(
+      Array.from(container.querySelectorAll(".sample")).map((mark) =>
+        mark.getAttribute("fill"),
+      ),
+    );
+    // Exactly two colours, one per class, and both are scale ends.
+    expect(fills.size).toBe(2);
+    for (const fill of fills) expect(ends).toContain(fill);
+  });
+
+  it("SAYS THE NEUTRAL BAND IS THE DECISION BOUNDARY, since a zero logit is p = 0.5", () => {
+    expect(CLASSIFIER_PALETTE.output.css(0)).toBe(CLASSIFIER_PALETTE.output.css(-0));
+    const snapshot = explorer.snapshot();
+    // The claim the legend makes: the colour scale's neutral point and the
+    // p = 0.5 contour are the same locus.
+    expect(1 / (1 + Math.exp(-0))).toBe(0.5);
+    expect(snapshot.probability).not.toBeNull();
+  });
+});
+
+describe("the samples on the map", () => {
+  it("DRAW TRAINING AND HELD-OUT POINTS ALIKE, with no split glyph", () => {
+    const container = document.createElement("div");
+    document.body.replaceChildren(container);
+    const explorer = createExplorer(CHECKPOINT);
+    const view = createInputOutputView({
+      container,
+      dataset: CHECKPOINT.dataset,
+      onProbe: () => {},
+    });
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, {
+      surface: SURFACE,
+      slices: CHECKPOINT.dataset.domain.map((_, axis) =>
+        outputSlice(snapshot.parameters, ACTIVATION, CHECKPOINT.dataset.domain, snapshot.x, axis),
+      ),
+      palette: PALETTE,
+      showSamples: true,
+    });
+
+    const samples = Array.from(container.querySelectorAll(".sample"));
+    expect(samples).toHaveLength(CHECKPOINT.dataset.samples.y.length);
+    expect(CHECKPOINT.dataset.samples.isTest.some(Boolean)).toBe(true);
+    // The split is a number in "Prediction and loss", not a glyph: no
+    // checkpoint here can show a gap the map would explain.
+    for (const sample of samples) {
+      expect(sample.getAttribute("class")).toBe("sample");
+    }
+  });
+});
+
+/**
+ * Every panel against every shape the controls can now select.
+ *
+ * The explorer used to have one architecture, so depth 0 (no hidden layer
+ * at all, one parameter layer) and depth 2 were unreachable and untested.
+ * These are the shapes themselves rather than the numbers: that each panel
+ * draws the right number of things for the architecture it was handed, and
+ * that nothing throws on the edges of the family.
+ */
+describe("the panels at every selectable shape", () => {
+  const SHAPES = [
+    "tilted-plane__2-1__none",
+    "tilted-plane__2-2-1__identity",
+    "curved-surface__2-2-4-1__tanh",
+    "xor-quadrants__2-4-4-1__relu",
+  ];
+
+  describe.each(SHAPES)("%s", (id) => {
+    const checkpoint = checkpointNamed(id);
+    const sizes = checkpoint.architecture.layerSizes;
+    const activation = checkpoint.architecture.hiddenActivation ?? "identity";
+    let container: HTMLElement;
+    let explorer: Explorer;
+
+    beforeEach(() => {
+      container = document.createElement("div");
+      document.body.replaceChildren(container);
+      explorer = createExplorer(checkpoint);
+    });
+
+    it("OPENS ON THE OUTPUT UNIT, whatever the depth", () => {
+      expect(explorer.snapshot().selection).toEqual({ layer: sizes.length - 2, out: 0 });
+    });
+
+    it("DRAWS ONE DOT PER PARAMETER in the tensor panel", () => {
+      const view = createTensorsView({ container });
+      view.render(explorer.snapshot());
+      const expected = checkpoint.parameters.reduce(
+        (total, layer) => total + layer.b.length + layer.W.length * layer.W[0].length,
+        0,
+      );
+      expect(container.querySelectorAll(".tensor-dot")).toHaveLength(expected);
+      // Two rectangles per parameter layer: the biases and their matrix.
+      expect(container.querySelectorAll(".tensor-block")).toHaveLength(
+        2 * checkpoint.parameters.length,
+      );
+    });
+
+    it("DRAWS EVERY NODE AND EDGE of the network", () => {
+      const view = createNetworkView({
+        container,
+        layerSizes: sizes,
+        idPrefix: `t-${id}`,
+        onSelect: () => {},
+      });
+      view.render(explorer.snapshot(), "weights", PALETTE_FOR(checkpoint, activation));
+      const edges = sizes.slice(1).reduce((total, out, index) => total + out * sizes[index], 0);
+      expect(container.querySelectorAll('[data-key^="n:"]')).toHaveLength(
+        sizes.reduce((a, b) => a + b, 0),
+      );
+      expect(container.querySelectorAll('.dn-edge[data-key^="e:"]')).toHaveLength(edges);
+    });
+
+    it("SWEEPS THE OUTPUT UNIT's OWN PARAMETERS, bias plus its fan-in", () => {
+      const view = createParamSpaceView({
+        container,
+        legend: document.createElement("p"),
+        outputName: checkpoint.dataset.task === "classification" ? "z" : "ŷ",
+        onEdit: () => {},
+      });
+      const snapshot = explorer.snapshot();
+      const palette = PALETTE_FOR(checkpoint, activation);
+      const curves = parameterCurves(
+        snapshot.parameters,
+        activation,
+        snapshot.x,
+        palette.param.limit,
+        unitParameters(snapshot.parameters, snapshot.selection),
+      );
+      view.render(snapshot, {
+        curves,
+        paramScale: palette.param,
+        outputScale: palette.output,
+        outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
+      });
+      // The fan-in of the output unit is the last hidden width, or the
+      // input width when there is no hidden layer at all.
+      expect(curves).toHaveLength(1 + sizes[sizes.length - 2]);
+      expect(container.querySelectorAll(".param-curve")).toHaveLength(curves.length);
+      expect(container.querySelectorAll(".param-slider")).toHaveLength(curves.length);
+    });
+
+    it("WRITES ONE TABLE ROW PER INPUT TERM of the selected neuron", () => {
+      const inspector = createInspector({
+        container,
+        activation,
+        task: checkpoint.dataset.task,
+        targetName: checkpoint.dataset.targetName,
+        inputNames: checkpoint.dataset.inputNames,
+      });
+      inspector.render(explorer.snapshot(), null);
+      expect(container.querySelectorAll("table.contributions tbody tr")).toHaveLength(
+        sizes[sizes.length - 2],
+      );
+      // The output layer applies no nonlinearity, so its unit plots the
+      // identity whatever the hidden activation is.
+      expect(
+        container.querySelector<SVGElement>(".phi-plot")!.dataset.activation,
+      ).toBe("identity");
+    });
+  });
+});
+
+/** The palette `main.ts` would build for this checkpoint. */
+function PALETTE_FOR(
+  checkpoint: ReturnType<typeof checkpointNamed>,
+  activation: Parameters<typeof outputSurface>[1],
+): Palette {
+  const surface = outputSurface(checkpoint.parameters, activation, checkpoint.dataset.domain, 8);
+  return {
+    param: createColorScale(
+      niceLimit(
+        checkpoint.parameters.flatMap((layer) => layer.W.flat()),
+        checkpoint.parameters.flatMap((layer) => layer.b),
+      ),
+      "param",
+    ),
+    output: createColorScale(
+      checkpoint.dataset.task === "classification"
+        ? niceLimit([surface.extent])
+        : niceLimit([surface.extent], checkpoint.dataset.samples.y),
+      "output",
+    ),
+  };
+}

@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
 
 import { forward } from "../src/model/evaluate.js";
 import { outputSlice, outputSurface } from "../src/model/surface.js";
-import { loadCheckpoint, loadManifest } from "./fixtures.js";
+import { checkpointNamed, PRIMARY } from "./fixtures.js";
 
-const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
+const CHECKPOINT = checkpointNamed(PRIMARY);
 const DOMAIN = CHECKPOINT.dataset.domain;
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 

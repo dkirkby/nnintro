@@ -51,6 +51,18 @@ export interface InputOutputOptions {
 
 export function createInputOutputView(options: InputOutputOptions): InputOutputView {
   const { container, dataset, onProbe } = options;
+  // A classifier's target is a class label, not a value on the axis the
+  // surface spans: 0 and 1 are not logits. So a sample is drawn at the end
+  // of the scale its class wants, and the useful reading becomes how
+  // saturated its own background is — a sample over the neutral band is one
+  // the model is unsure about, and the neutral band is where the logit is
+  // zero, i.e. the p = 0.5 decision boundary.
+  const isClassifier = dataset.task === "classification";
+  // What the three plots actually draw. For a regression that is the
+  // target's own name; for a classifier it is the logit, which is NOT the
+  // target -- saying "class" here would claim the surface takes the values
+  // 0 and 1.
+  const quantity = isClassifier ? "the logit" : dataset.targetName;
   if (dataset.domain.length !== 2) {
     throw new Error(`this panel draws 2 inputs, not ${dataset.domain.length}`);
   }
@@ -149,8 +161,18 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
         mark.setAttribute("r", "3.2");
         // The target on the same scale as the surface behind it, so a dot
         // that disappears into its background is one the model already fits.
-        mark.setAttribute("fill", palette.output.css(y));
-        mark.setAttribute("class", dataset.samples.isTest[n] ? "sample is-test" : "sample");
+        mark.setAttribute(
+          "fill",
+          palette.output.css(
+            isClassifier ? (y > 0.5 ? palette.output.limit : -palette.output.limit) : y,
+          ),
+        );
+        // Training and held-out samples are drawn alike. The split is a
+        // number in "Prediction and loss", not a glyph to decode: no
+        // checkpoint here can show a gap the map would explain, since the
+        // regression targets are noiseless and the classifiers' overlap is
+        // in the targets rather than in the split.
+        mark.setAttribute("class", "sample");
         marks.push(mark);
       });
     }
@@ -158,9 +180,9 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
     mapSvg.replaceChildren(...marks);
     mapSvg.setAttribute(
       "aria-label",
-      `${dataset.targetName} over both inputs. Probe at ` +
+      `${quantity} over both inputs. Probe at ` +
         `${snapshot.x[0].toFixed(2)}, ${snapshot.x[1].toFixed(2)}, where ` +
-        `${dataset.targetName} is ${snapshot.trace.output.toFixed(3)}.`,
+        `${quantity} is ${snapshot.trace.output.toFixed(3)}.`,
     );
 
     below.draw({
@@ -169,7 +191,7 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
       along: px,
       output: snapshot.trace.output,
       label:
-        `${dataset.targetName} against ${dataset.inputNames[0]} with ` +
+        `${quantity} against ${dataset.inputNames[0]} with ` +
         `${dataset.inputNames[1]} held at ${snapshot.x[1].toFixed(3)}.`,
     });
     left.draw({
@@ -178,7 +200,7 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
       along: py,
       output: snapshot.trace.output,
       label:
-        `${dataset.targetName} against ${dataset.inputNames[1]} with ` +
+        `${quantity} against ${dataset.inputNames[1]} with ` +
         `${dataset.inputNames[0]} held at ${snapshot.x[0].toFixed(3)}.`,
     });
   }

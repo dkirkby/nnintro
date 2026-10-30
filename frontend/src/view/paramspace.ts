@@ -53,6 +53,17 @@ export interface ParamSpaceFrame {
 
 export interface ParamSpaceOptions {
   container: HTMLElement;
+  /**
+   * Where this panel's explanation is written. Owned by the caller, not
+   * created here: it lives in the panel's `?` popup, which outlives any one
+   * checkpoint's view (see `view/help.ts`).
+   */
+  legend: HTMLElement;
+  /**
+   * What the vertical axis is: `ŷ` for a regression, `z` for a classifier,
+   * whose output is a logit rather than a prediction of the target.
+   */
+  outputName: string;
   onEdit: (ref: ParameterRef, value: number) => void;
 }
 
@@ -65,7 +76,7 @@ interface SliderRow {
 }
 
 export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView {
-  const { container, onEdit } = options;
+  const { container, legend, outputName, onEdit } = options;
 
   // One grid, so the plot, the colour bar and every slider span the same
   // column: the axis is shared, not merely similar.
@@ -86,10 +97,7 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
   name.className = "param-axis-name";
   bar.append(low, name, high);
 
-  const hint = document.createElement("p");
-  hint.className = "legend";
-
-  container.replaceChildren(grid, hint);
+  container.replaceChildren(grid);
 
   /**
    * Rebuilt only when the selected unit's parameters change, so dragging a
@@ -220,14 +228,14 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
     label.setAttribute("y", labelY.toFixed(2));
     label.setAttribute("text-anchor", "end");
     label.setAttribute("class", "slice-tick");
-    label.textContent = `ŷ = ${format(snapshot.trace.output)}`;
+    label.textContent = `${outputName} = ${format(snapshot.trace.output)}`;
     marks.push(label);
 
     svg.replaceChildren(...marks);
     svg.setAttribute(
       "aria-label",
       `${curves.length} parameters of ${describeUnit(snapshot.selection)} swept ` +
-        `one at a time; every curve passes through ŷ = ` +
+        `one at a time; every curve passes through ${outputName} = ` +
         `${format(snapshot.trace.output)} at its current value.`,
     );
 
@@ -254,7 +262,7 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
       row.readout.textContent = format(curve.current);
     }
 
-    hint.textContent =
+    legend.textContent =
       `Each line is one parameter of ${describeUnit(snapshot.selection)} — its ` +
       `bias b and the weights wᵢ feeding it — swept across the scale above, ` +
       `everything else held. Drag a slider to edit that parameter and move ` +

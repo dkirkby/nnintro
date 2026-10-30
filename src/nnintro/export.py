@@ -271,6 +271,7 @@ def build_checkpoint(
         "checkpointId": checkpoint_id(dataset.id, config.sizes, config.activation),
         "dataset": {
             "id": dataset.id,
+            "label": dataset.label,
             "task": dataset.task,
             "description": dataset.description,
             "generatorVersion": dataset.generator_version,
@@ -347,8 +348,26 @@ def build_manifest(payloads: list[dict]) -> dict:
     A control must not be able to reach a configuration that is missing
     here: the browser enumerates this, rather than assuming coverage.
     """
+    # One entry per dataset, so the UI can label and group its dataset
+    # control without opening 19 checkpoints to find out what they share.
+    seen: dict[str, dict] = {}
+    for p in payloads:
+        spec = p["dataset"]
+        seen.setdefault(
+            spec["id"],
+            {
+                "id": spec["id"],
+                "label": spec["label"],
+                "task": spec["task"],
+                "description": spec["description"],
+                "generatorVersion": spec["generatorVersion"],
+                "hasAnalyticTarget": spec["hasAnalyticTarget"],
+                "sampleCount": len(spec["samples"]["y"]),
+            },
+        )
     return {
         "schemaVersion": SCHEMA_VERSION,
+        "datasets": list(seen.values()),
         "checkpoints": [
             {
                 "checkpointId": p["checkpointId"],

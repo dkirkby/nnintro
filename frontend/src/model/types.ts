@@ -28,6 +28,8 @@ export interface DatasetSamples {
 
 export interface DatasetSpec {
   id: string;
+  /** The short name a control wears; `description` is the formula. */
+  label: string;
   task: Task;
   description: string;
   generatorVersion: number;
@@ -93,8 +95,20 @@ export interface ManifestEntry {
   metrics: { trainLoss: number; testLoss: number };
 }
 
+/** One dataset's own properties, shared by all of its checkpoints. */
+export interface ManifestDataset {
+  id: string;
+  label: string;
+  task: Task;
+  description: string;
+  generatorVersion: number;
+  hasAnalyticTarget: boolean;
+  sampleCount: number;
+}
+
 export interface Manifest {
   schemaVersion: string;
+  datasets: ManifestDataset[];
   checkpoints: ManifestEntry[];
 }
 

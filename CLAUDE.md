@@ -15,18 +15,55 @@ consequences**: load random or pre-trained parameters, trace one input through t
 edit a single weight or bias, and compare the local derivative's prediction against the
 actual change.
 
-## Status: Stage 0 is implemented
+## Status: Stage 0, plus Stage 1's catalog and controls
 
 `PLAN.md` is the design spec; **read it before writing anything**, since its
 scope boundaries are settled decisions rather than defaults. The sections most
 often needed are §3 (dataset/architecture catalog), §7 (technical design), §8
 (asset pipeline), and §11 (milestones).
 
-Stage 0 — the numerical and visual spike — is done: one dataset, one network,
-the PyTorch export with golden fixtures, the nnet-svg adapter, editable
-weights and biases, and the downstream-effect analysis. `README.md` documents the export
-schema that joins the two halves and the deviations from `PLAN.md`; keep both
-current when that contract changes.
+Stage 0 — the numerical and visual spike — is done: the PyTorch export with
+golden fixtures, the nnet-svg adapter, editable weights and biases, and the
+downstream-effect analysis. The catalog is now complete too: **four datasets
+x nineteen variants = 76 checkpoints**, selected by the controls described
+below. `README.md` documents the export schema that joins the two halves and
+the deviations from `PLAN.md`; keep both current when that contract changes.
+
+`main.ts` is in two halves, and the split is what makes a reset honest. The
+**shell** is built once: the panels, the four `?` popups, the catalog
+controls and the display controls. A **session** is built per checkpoint: the
+explorer and the five views that read its snapshot. Changing dataset, depth,
+width or activation destroys the session and mounts a new one, so parameters
+cannot be carried across a change of problem or of shape (PLAN.md section 4)
+— the object that held them is gone. Display preferences (the edge mode, the
+sample toggle) belong to the reader, so they live in the shell and survive a
+switch. So does the reader's *place* in the figure, which is not the same
+thing as state the new asset disagrees with: the probe is carried over when
+the dataset is unchanged, and the selected unit when the shape is unchanged
+(which is exactly the activation-only switch). Both exist so that "change
+one thing and look at the same place" works across a switch, and neither
+carries a parameter. The new session is mounted only once its checkpoint has arrived, so a
+slow fetch leaves the current figure up rather than blanking it. A discrete
+slider fires an event for every stop it crosses, so several loads can be in
+flight at once: `main.ts` keeps a request token and mounts only the last one
+asked for. Nothing is disabled while a load runs — disabling a slider
+mid-drag would break the gesture — so supersession, not a busy flag, is what
+keeps two switches from fighting.
+
+`view/selector.ts` is the catalog control. Depth and width are **discrete
+sliders with labeled stops** (PLAN.md section 3), because the quantities are
+ordered; dataset and activation are named rather than ordered, so they are
+button groups. A slider's value is a stop *index*, never the quantity, so the
+stops need be neither consecutive nor evenly spaced. Deepening gives the new
+layer the width of the last one that already existed (2-4-1 becomes 2-4-4-1),
+and the width control for a layer that does not exist is *hidden* rather than
+disabled, since there is no such thing as the width of hidden layer 1 at
+depth 0. Every stop is checked against the published catalog before it is
+offered: `createCatalogIndex` (`model/catalog.ts`) enumerates the manifest,
+unavailable buttons are disabled, unavailable slider stops are struck
+through, and one dragged onto anyway snaps back and says why. A depth-0 entry
+keys without an activation, so the activation the control still remembers
+cannot make the linear model unreachable.
 
 The "Inputs → output" panel is one figure on shared axes: the ŷ(x₁, x₂) map,
 ŷ(x₁) below it holding x₂ at the probe, and ŷ(x₂) to its left holding x₁,
@@ -35,7 +72,15 @@ crosshairs crosses all three and each slice's curve meets it at the
 prediction, so a misaligned axis shows up immediately; `tests/view.dom.test.ts`
 pins the alignment. The map also draws its own two axes — thin dashed lines
 where each input is zero, under the samples and the crosshairs — so a
-position can be read without counting in from the edges. It opens with no
+position can be read without counting in from the edges. Training and held-out samples are drawn **alike**: the split is a number in
+"Prediction and loss", not a glyph to decode. No checkpoint in this catalog
+can show a gap the map would explain — the two regression generators are
+noiseless, so their splits agree by construction, and the classifiers'
+irreducible error is in the overlap of the classes rather than in which
+split a point landed in. Do not reintroduce a dashed outline for the
+held-out split without a dataset whose splits actually differ.
+
+It opens with no
 samples drawn and the probe at `OPENING_PROBE` (`state.ts`), 0.5 in each
 input, clamped into that input's domain: the panel is there to be probed
 first, `Show samples` is an explicit opt-in, and the probe starts off the
@@ -44,6 +89,22 @@ zeroed.
 
 The display modes now only switch what the **edges** show (weight or
 contribution). Node fills never vary with the mode.
+
+**A classifier's output is a logit, and the panels say so.** Two of the four
+datasets are classifiers, so this is not a hypothetical: sigmoid is applied
+for display and labeled, and the logit stays beside it, because the logit is
+what the parameters produce and what every plot draws (PLAN.md section 3).
+The inspector reads `logit z`, `probability p` and `class y` rather than
+`prediction ŷ` and `target y`, and its sensitivity defaults to `∂p/∂x` with
+`∂z/∂x` kept and labeled. The output colour scale stays the diverging one
+centred on zero, which is exactly right here: z = 0 is p = 0.5, so the
+neutral band in the map *is* the decision boundary. The one thing that
+cannot stay on the logit axis is the target — 0 and 1 are class labels, not
+logits — so a classifier's targets are left out of the scale's limit and a
+sample is drawn at the end of the scale its class wants. A sample over a
+neutral background is then one the model is unsure about. An explicit dashed
+p = 0.5 contour (PLAN.md section 4) is still unimplemented; the neutral band
+stands in for it.
 
 "Parameter Tensors" (`view/tensors.ts`) is the parameters by shape rather
 than by value: one group per parameter layer, left to right, each the bias
@@ -121,9 +182,9 @@ the smallest round number holding that z with 5% headroom, so the dot cannot
 land on the frame and the range only steps when z really outgrows it.
 `tests/view.dom.test.ts` asserts the dot is a point *of* the drawn curve.
 
-Stage 1 is mostly catalog growth: `CATALOG` in `src/nnintro/cli.py` has one
-entry and needs the other 75, and the UI needs the depth/width/activation
-controls that select among them.
+What is left of Stage 1 is the dataset-specific display work the catalog now
+makes reachable: the p = 0.5 decision contour, and whether anything else
+should read differently for a classifier.
 
 ## Commands
 
@@ -133,11 +194,16 @@ uv run nnintro train     # curate + train the catalog -> data/
 uv run nnintro publish   # data/ -> frontend/public/data (the tracked snapshot)
 uv run nnintro verify    # re-check the published snapshot
 uv run pytest            # 26 pipeline tests, ~1 s
+                         # `nnintro train` runs 76 configurations x 96
+                         # attempts over a process pool: ~15 minutes, and it
+                         # exits non-zero if any configuration ends up with
+                         # no checkpoint. `--only <substring>` restricts it.
 
 cd frontend
 npm ci                   # npm install needs --legacy-peer-deps on a fresh
                          # resolve; see README
-npm run test             # 124 vitest tests, including the golden fixtures
+npm run test             # vitest, including the golden fixtures for every
+                         # one of the 76 checkpoints
 npm run typecheck
 npm run build            # static site -> frontend/dist
 ```
@@ -206,11 +272,28 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
 - **Training alone does not produce a teaching asset.** Plain training on the
   tilted plane reliably routes everything through one hidden unit and leaves
   the rest with ~1e-6 output weights: it fits perfectly and demonstrates
-  nothing. `train.curate` trains repeatedly and keeps the best checkpoint that
-  passes `SELECTION_CRITERIA` (no vestigial units, no dead units, at least one
-  ReLU kink crossing the visible domain), and the report is exported under
-  `selection` so the choice can be audited. Only 2 of 24 attempts pass, so do
-  not "simplify" this back to a single `train()` call.
+  nothing. `train.curate` trains 96 times and keeps the lowest training loss
+  among the attempts that pass `SELECTION_CRITERIA`, and the report is
+  exported under `selection` so the choice can be audited. Do not "simplify"
+  this back to a single `train()` call, and do not lower the attempt count:
+  the tilted plane with two ReLU hidden layers accepts roughly one attempt in
+  eight and its first acceptable seed is the 38th, so 24 attempts leaves two
+  holes in the catalog.
+  - The criteria are about **legibility, not accuracy**, and they have to be:
+    a linear model on XOR and a 2-2-1 on the curved surface cannot fit their
+    datasets, and those imperfect fits are intended assets (PLAN.md section
+    3). An absolute loss threshold was the Stage 0 criterion and only ever
+    worked because there was one dataset. The checks are: no vestigial unit
+    (`relative_output_weight`), no dead or saturated unit
+    (`relative_variation` — the std of the unit's activation over a domain
+    grid, which catches a dead ReLU, a saturated tanh and a ~0-weight unit
+    alike), and at least one hidden unit whose transition crosses the domain
+    (`positive_fraction` strictly inside (0, 1), which for ReLU is exactly
+    the kink crossing). Every hidden layer is diagnosed, not just the first.
+  - The objective is the **training** loss, deliberately not the held-out
+    loss: the explorer shows both, and picking the attempt with the best
+    held-out loss would bias that number below its training counterpart and
+    make the gap an artefact of selection.
 - **Two colour maps, one per family of quantity.** `view/colormap.ts` owns
   them: **param** (magenta/green) for weights and biases — every edge, and
   the hidden nodes, which are filled by their bias while their number stays

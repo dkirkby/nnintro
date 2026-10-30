@@ -16,9 +16,9 @@ import {
   type ParameterRef,
   type UnitRef,
 } from "../src/model/types.js";
-import { loadCheckpoint, loadManifest } from "./fixtures.js";
+import { allCheckpoints, checkpointNamed, PRIMARY } from "./fixtures.js";
 
-const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
+const CHECKPOINT = checkpointNamed(PRIMARY);
 const WEIGHT: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
 const BIAS: ParameterRef = { kind: "bias", layer: 0, out: 2 };
 /** The unit each of those belongs to: what a click on either now selects. */
@@ -228,5 +228,49 @@ describe("edit records as subscribers see them", () => {
     explorer.restoreParameter(BIAS);
     expect(seen[0]).not.toBeNull();
     expect(seen[0]!.before).toBe(0.75);
+  });
+});
+
+/**
+ * The browser's copy of the generators' formulas.
+ *
+ * `state.ts` has to evaluate a target at a point the pipeline never
+ * sampled, so it duplicates the formula. That duplication is only safe if
+ * it is checked: every published dataset that declares an analytic target
+ * must have one here, agreeing with the pipeline's own samples.
+ */
+describe("analytic targets", () => {
+  it("EXIST FOR EVERY DATASET THAT CLAIMS ONE, and agree with its samples", () => {
+    const seen = new Set<string>();
+    for (const checkpoint of allCheckpoints()) {
+      if (seen.has(checkpoint.dataset.id)) continue;
+      seen.add(checkpoint.dataset.id);
+      // Construction throws if the formula is missing, which is the point.
+      const explorer = createExplorer(checkpoint);
+      const { samples, hasAnalyticTarget } = checkpoint.dataset;
+      if (!hasAnalyticTarget) continue;
+      // Probing a sample's own coordinates as a *free* probe must give the
+      // target the pipeline recorded for it.
+      for (const index of [0, 7, samples.y.length - 1]) {
+        explorer.setProbe({ kind: "free", x: samples.x[index] });
+        expect(explorer.snapshot().target).toBeCloseTo(samples.y[index], 12);
+      }
+    }
+    expect(seen.size).toBe(4);
+  });
+
+  it("GIVE A STOCHASTIC CLASSIFIER NO TARGET AND NO LOSS at a free probe", () => {
+    const classifier = allCheckpoints().find(
+      (entry) => entry.dataset.task === "classification",
+    )!;
+    const explorer = createExplorer(classifier);
+    explorer.setProbe({ kind: "free", x: [0.21, -0.37] });
+    const snapshot = explorer.snapshot();
+    expect(snapshot.target).toBeNull();
+    expect(snapshot.pointLoss).toBeNull();
+    expect(snapshot.pointGradient).toBeNull();
+    // A sample, by contrast, has the label it was given.
+    explorer.setProbe({ kind: "sample", index: 3 });
+    expect(explorer.snapshot().target).toBe(classifier.dataset.samples.y[3]);
   });
 });

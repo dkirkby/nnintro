@@ -1,6 +1,111 @@
 {
- "schemaVersion": "0.1.0",
+ "schemaVersion": "0.2.0",
+ "datasets": [
+  {
+   "id": "tilted-plane",
+   "label": "Tilted plane",
+   "task": "regression",
+   "description": "y = 0.6 x1 - 0.4 x2 + 0.2",
+   "generatorVersion": 1,
+   "hasAnalyticTarget": true,
+   "sampleCount": 400
+  },
+  {
+   "id": "curved-surface",
+   "label": "Curved surface",
+   "task": "regression",
+   "description": "y = sin(pi x1) cos(pi x2)",
+   "generatorVersion": 1,
+   "hasAnalyticTarget": true,
+   "sampleCount": 400
+  },
+  {
+   "id": "gaussian-clusters",
+   "label": "Gaussian clusters",
+   "task": "classification",
+   "description": "two overlapping Gaussian clusters, one per class",
+   "generatorVersion": 1,
+   "hasAnalyticTarget": false,
+   "sampleCount": 400
+  },
+  {
+   "id": "xor-quadrants",
+   "label": "XOR quadrants",
+   "task": "classification",
+   "description": "XOR quadrants: class 1 where the two inputs share a sign",
+   "generatorVersion": 1,
+   "hasAnalyticTarget": false,
+   "sampleCount": 400
+  }
+ ],
  "checkpoints": [
+  {
+   "checkpointId": "tilted-plane__2-1__none",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    1
+   ],
+   "hiddenActivation": null,
+   "url": "tilted-plane__2-1__none.json",
+   "contentHash": "sha256:89b6e8fb7995bd63623cb5d011a7ec555a1264908560875410da3eef8f27f0b1",
+   "metrics": {
+    "trainLoss": 0.0,
+    "testLoss": 0.0
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-1__relu",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "tilted-plane__2-2-1__relu.json",
+   "contentHash": "sha256:6c2aa5a266e887ecfbec96112518d17aa648a2c3cad4bdd2c1fb7147f76ac1d6",
+   "metrics": {
+    "trainLoss": 8.169554082847607e-33,
+    "testLoss": 8.676314399464497e-33
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-1__tanh",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "tilted-plane__2-2-1__tanh.json",
+   "contentHash": "sha256:c3dcbc511a31a038dbf7e65ffa0b9fbc29ee1f79103ff6bec1a855880c0469ab",
+   "metrics": {
+    "trainLoss": 6.84665997161139e-07,
+    "testLoss": 7.939239495091082e-07
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-1__identity",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "tilted-plane__2-2-1__identity.json",
+   "contentHash": "sha256:01cecdb8a99206bc94a1a2b7c540b125d75e9ffa5aaab2ed0178a4572b668842",
+   "metrics": {
+    "trainLoss": 3.396257086305366e-33,
+    "testLoss": 3.3896367021215354e-33
+   }
+  },
   {
    "checkpointId": "tilted-plane__2-4-1__relu",
    "dataset": "tilted-plane",
@@ -12,10 +117,1262 @@
    ],
    "hiddenActivation": "relu",
    "url": "tilted-plane__2-4-1__relu.json",
-   "contentHash": "sha256:c82a4df64c8942c49fe486ab4d27100c7317687412a66a1fe23929fbb0609f4c",
+   "contentHash": "sha256:3dd22c430ab6564e41b60d61b983865b214e2de20d904d92cac1ac979c364359",
    "metrics": {
-    "trainLoss": 3.987179078934232e-15,
-    "testLoss": 4.1173094946159785e-15
+    "trainLoss": 1.3865491893372857e-32,
+    "testLoss": 2.784894699583943e-32
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-1__tanh",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "tilted-plane__2-4-1__tanh.json",
+   "contentHash": "sha256:00c55d550036f244a13521229074165ca3049f39472a451d5ffd6d4355d97a9a",
+   "metrics": {
+    "trainLoss": 8.448802444351423e-07,
+    "testLoss": 7.377955416174532e-07
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-1__identity",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "tilted-plane__2-4-1__identity.json",
+   "contentHash": "sha256:8a510e3c26614a08cbe9bf1c5f32388f2a67ee861b443275cddcc3267e7a6f03",
+   "metrics": {
+    "trainLoss": 3.26460171901327e-33,
+    "testLoss": 3.457044250175088e-33
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-2-1__relu",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "tilted-plane__2-2-2-1__relu.json",
+   "contentHash": "sha256:d0ddbe9675dc25915aa98eb090a1eaf2c884eaee7cd13a0efb621af09fe3e584",
+   "metrics": {
+    "trainLoss": 7.714580698196432e-18,
+    "testLoss": 8.368466187616973e-08
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-2-1__tanh",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "tilted-plane__2-2-2-1__tanh.json",
+   "contentHash": "sha256:939f8c1ce6985956bf150a0c66fe5a42be85f09c93a1efe241d473141da5e90e",
+   "metrics": {
+    "trainLoss": 1.3331467906396254e-06,
+    "testLoss": 1.3634465653860109e-06
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-2-1__identity",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "tilted-plane__2-2-2-1__identity.json",
+   "contentHash": "sha256:1c04bbab8db2498c4e86485596d12a83c2e72d7192b1c4118c17b8412c231515",
+   "metrics": {
+    "trainLoss": 3.5379934931501145e-33,
+    "testLoss": 3.790470871797128e-33
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-4-1__relu",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "tilted-plane__2-2-4-1__relu.json",
+   "contentHash": "sha256:846d5db90ef2f6a2fa26692f1b055fbecb1f12634b94422a508b30f9830ca357",
+   "metrics": {
+    "trainLoss": 4.051740795829929e-09,
+    "testLoss": 4.060329817103458e-09
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-4-1__tanh",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "tilted-plane__2-2-4-1__tanh.json",
+   "contentHash": "sha256:0d3a3381b03efac956de7a3c2961bd12f777308a2808cc788a580dcc419efb93",
+   "metrics": {
+    "trainLoss": 8.766452012027488e-07,
+    "testLoss": 8.504562845963159e-07
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-2-4-1__identity",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "tilted-plane__2-2-4-1__identity.json",
+   "contentHash": "sha256:063aea52cba98a25cb5fc8454d2802fc7ea60f3e34821db73702163b02383ebf",
+   "metrics": {
+    "trainLoss": 3.202460385651401e-33,
+    "testLoss": 2.0607450404943422e-33
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-2-1__relu",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "tilted-plane__2-4-2-1__relu.json",
+   "contentHash": "sha256:3777fc901561865c5c9dee76a8c728b923f891c88f0846aea4519f0b01319fd1",
+   "metrics": {
+    "trainLoss": 1.7751628063579738e-09,
+    "testLoss": 1.4209776006712248e-06
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-2-1__tanh",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "tilted-plane__2-4-2-1__tanh.json",
+   "contentHash": "sha256:e170f778a71869a8fcea9009e10501c7669de8075988efb65b7dcff7d9233130",
+   "metrics": {
+    "trainLoss": 1.8121877368679781e-06,
+    "testLoss": 1.8806758372767557e-06
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-2-1__identity",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "tilted-plane__2-4-2-1__identity.json",
+   "contentHash": "sha256:5d84237440cfe15f4f2d0857919817ae7259a3632f78b99ce679640605b4325d",
+   "metrics": {
+    "trainLoss": 3.077876792373851e-33,
+    "testLoss": 6.211124070648836e-33
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-4-1__relu",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "tilted-plane__2-4-4-1__relu.json",
+   "contentHash": "sha256:82a6f64b4bb0a5aca2e789d26dd3eb2a338c0f7d345c38a549c07202fd257885",
+   "metrics": {
+    "trainLoss": 5.093842350326595e-10,
+    "testLoss": 2.1518554863374296e-09
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-4-1__tanh",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "tilted-plane__2-4-4-1__tanh.json",
+   "contentHash": "sha256:d98c3616e6be7a3decb785f13712bd8eaadd8f12ba3a2e889bee8e92c922e77f",
+   "metrics": {
+    "trainLoss": 5.783639438801986e-07,
+    "testLoss": 5.368723360522267e-07
+   }
+  },
+  {
+   "checkpointId": "tilted-plane__2-4-4-1__identity",
+   "dataset": "tilted-plane",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "tilted-plane__2-4-4-1__identity.json",
+   "contentHash": "sha256:b4db197951292ed7c7e543d3acf9be7d6c836d1f45361202d1475968d3b8e6d1",
+   "metrics": {
+    "trainLoss": 3.5039887925695275e-33,
+    "testLoss": 3.611118645726067e-33
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-1__none",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    1
+   ],
+   "hiddenActivation": null,
+   "url": "curved-surface__2-1__none.json",
+   "contentHash": "sha256:584c55fda83bd9678c84debadc9d0c761541e46ff67aa7b8c2ee19027ee6d4a9",
+   "metrics": {
+    "trainLoss": 0.26395536174666945,
+    "testLoss": 0.24258974733572716
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-1__relu",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "curved-surface__2-2-1__relu.json",
+   "contentHash": "sha256:9d741cee4dc77642c9599738acc2b9be02aca584d15f6d2cf6390348f5ffb10e",
+   "metrics": {
+    "trainLoss": 0.16361851488981585,
+    "testLoss": 0.16874463715832216
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-1__tanh",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "curved-surface__2-2-1__tanh.json",
+   "contentHash": "sha256:60ad0d21aedf36c56ed84169f084d7cdf23059ebb856ea56dbae63ecea879bf8",
+   "metrics": {
+    "trainLoss": 0.11016787524126279,
+    "testLoss": 0.12222121023444577
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-1__identity",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "curved-surface__2-2-1__identity.json",
+   "contentHash": "sha256:23fd36bd06ffb2cb449ad178905192fa30cdef5b318beac179c4055f2e61d5c8",
+   "metrics": {
+    "trainLoss": 0.26395536174666945,
+    "testLoss": 0.2425897473404059
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-1__relu",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "curved-surface__2-4-1__relu.json",
+   "contentHash": "sha256:5040b81af38cae93be9960c5d60b7e6db892834bb3052eb10b6a50cf1a327502",
+   "metrics": {
+    "trainLoss": 0.0627428641103757,
+    "testLoss": 0.06727668813740198
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-1__tanh",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "curved-surface__2-4-1__tanh.json",
+   "contentHash": "sha256:f7f4422bbd3f6c42a173009d5ad95e7855bbc8f9a7e009b2242a483668c73eec",
+   "metrics": {
+    "trainLoss": 0.007334947677416966,
+    "testLoss": 0.01052233994597937
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-1__identity",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "curved-surface__2-4-1__identity.json",
+   "contentHash": "sha256:a45ad769a3aa449718a72c1f7cfe5ff133b741e350094f70ce1471a341b185c6",
+   "metrics": {
+    "trainLoss": 0.2639553617466694,
+    "testLoss": 0.24258974734041255
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-2-1__relu",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "curved-surface__2-2-2-1__relu.json",
+   "contentHash": "sha256:5431ed371d149a46e11ec86a0e4ccc924dec4c935a3e9a11551c1e23e4ead5e8",
+   "metrics": {
+    "trainLoss": 0.10667857885666163,
+    "testLoss": 0.09838378600115452
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-2-1__tanh",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "curved-surface__2-2-2-1__tanh.json",
+   "contentHash": "sha256:4281b9c82c8022bce67de403b025971a7b6a492536fc626655ad836128466369",
+   "metrics": {
+    "trainLoss": 0.04309980800063303,
+    "testLoss": 0.04615409547638539
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-2-1__identity",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "curved-surface__2-2-2-1__identity.json",
+   "contentHash": "sha256:ddf3ffcd42e76d9022b2aed2034b21b5d32e767c567ecd090414fb1f64438e59",
+   "metrics": {
+    "trainLoss": 0.26395536174666945,
+    "testLoss": 0.24258974734041283
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-4-1__relu",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "curved-surface__2-2-4-1__relu.json",
+   "contentHash": "sha256:7fce76847e8bc9b6b3ca45a6c7712a5e9b1b68c386ff1a41292520beb94984ee",
+   "metrics": {
+    "trainLoss": 0.03868654477857769,
+    "testLoss": 0.04164658866010926
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-4-1__tanh",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "curved-surface__2-2-4-1__tanh.json",
+   "contentHash": "sha256:606fe9ce8e9ffdc5387b2ccd8a6e1c5cedbc9c7af99dfb092424c147d0f97178",
+   "metrics": {
+    "trainLoss": 0.004290869502210059,
+    "testLoss": 0.005535275257088865
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-2-4-1__identity",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "curved-surface__2-2-4-1__identity.json",
+   "contentHash": "sha256:dbd525a8ea9b0d890e51b3fbd3dbc9f74f524362338590e209e31b4f3cdc8fde",
+   "metrics": {
+    "trainLoss": 0.26395536174666945,
+    "testLoss": 0.24258974734043756
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-2-1__relu",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "curved-surface__2-4-2-1__relu.json",
+   "contentHash": "sha256:a293150a9dd0c8eb0ecf0545df0e5f4cc4e4d19e7a5ce0b63374e5cd7f3ed54e",
+   "metrics": {
+    "trainLoss": 0.012823578168809585,
+    "testLoss": 0.01828572875456298
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-2-1__tanh",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "curved-surface__2-4-2-1__tanh.json",
+   "contentHash": "sha256:6bf24abb1960de9fa5265b4d3dbb0a08903d0501ed00539aab86ccd8318f0052",
+   "metrics": {
+    "trainLoss": 0.0017128328705626754,
+    "testLoss": 0.002498635835590219
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-2-1__identity",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "curved-surface__2-4-2-1__identity.json",
+   "contentHash": "sha256:18a82c33f2c66c09bddc4528a76a6991b998ca56f83d86e68ea1f02317f47268",
+   "metrics": {
+    "trainLoss": 0.26395536174666945,
+    "testLoss": 0.24258974734048738
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-4-1__relu",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "curved-surface__2-4-4-1__relu.json",
+   "contentHash": "sha256:0a5987eae288c9b1ca3b93a4477d535e4a7b840a85c80724679854f89d8dbafd",
+   "metrics": {
+    "trainLoss": 0.008583085592760062,
+    "testLoss": 0.014230695290342345
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-4-1__tanh",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "curved-surface__2-4-4-1__tanh.json",
+   "contentHash": "sha256:81bf764c7eaf82dc29c21bf5736808aee993c5e03feee3b0175bf354a46e9f61",
+   "metrics": {
+    "trainLoss": 0.00027455697275968716,
+    "testLoss": 0.0004342524565161306
+   }
+  },
+  {
+   "checkpointId": "curved-surface__2-4-4-1__identity",
+   "dataset": "curved-surface",
+   "task": "regression",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "curved-surface__2-4-4-1__identity.json",
+   "contentHash": "sha256:e756c48525242ea152e65ea0f367fe7f3fb53e408726ae0e4ba3ece58012e95e",
+   "metrics": {
+    "trainLoss": 0.26395536174666945,
+    "testLoss": 0.24258974738516584
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-1__none",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    1
+   ],
+   "hiddenActivation": null,
+   "url": "gaussian-clusters__2-1__none.json",
+   "contentHash": "sha256:89710d2d5f862bcf9cbbbf2809f50e9ecadd64ec7bb202a7ce84d36a0ae2e86a",
+   "metrics": {
+    "trainLoss": 0.14007934452527332,
+    "testLoss": 0.12358836044152258
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-1__relu",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "gaussian-clusters__2-2-1__relu.json",
+   "contentHash": "sha256:089cc9bdbf52d05fc0bfe38e4ca47a1a594b4587e54ac51593d467a5f2ff4ad4",
+   "metrics": {
+    "trainLoss": 0.12892502303693348,
+    "testLoss": 0.38896563378313215
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-1__tanh",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "gaussian-clusters__2-2-1__tanh.json",
+   "contentHash": "sha256:8efad73c21d43d4b45f8a6ca90c9d8cbf847094866e76ce02d24319f25f27cee",
+   "metrics": {
+    "trainLoss": 0.11847631234237262,
+    "testLoss": 0.2864186390658038
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-1__identity",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "gaussian-clusters__2-2-1__identity.json",
+   "contentHash": "sha256:41636e5e51819b4f54b42814f2e1bb8292c5fe638555ce0d0ffb0036cb85ae42",
+   "metrics": {
+    "trainLoss": 0.14007934452527332,
+    "testLoss": 0.12358836044362091
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-1__relu",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "gaussian-clusters__2-4-1__relu.json",
+   "contentHash": "sha256:f111176f2dafb921363da6c2eb74b141933fdb2d8297347d812bca00647a1421",
+   "metrics": {
+    "trainLoss": 0.09050636663366936,
+    "testLoss": 0.3838255667656047
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-1__tanh",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "gaussian-clusters__2-4-1__tanh.json",
+   "contentHash": "sha256:bf80f9ce7463e0af8266af8cbd55d6f643486e55d290ef327ce81e8f72b00b7c",
+   "metrics": {
+    "trainLoss": 0.0977133454505407,
+    "testLoss": 0.23038315722186517
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-1__identity",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "gaussian-clusters__2-4-1__identity.json",
+   "contentHash": "sha256:797a8f2626a6f46941110bd75391a66e80089dc49ba84c7cd5fdee95baaea0a5",
+   "metrics": {
+    "trainLoss": 0.14007934452527332,
+    "testLoss": 0.12358836045140001
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-2-1__relu",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "gaussian-clusters__2-2-2-1__relu.json",
+   "contentHash": "sha256:cb9569c901f924626e79fd210b4bad2022714c3e0c30969fc622fff0e5466b12",
+   "metrics": {
+    "trainLoss": 0.10640684342684689,
+    "testLoss": 0.23786718346903868
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-2-1__tanh",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "gaussian-clusters__2-2-2-1__tanh.json",
+   "contentHash": "sha256:fd1d3071bab9df938b293f0c490fad1fe148c6da994122c31bd7186e487fd458",
+   "metrics": {
+    "trainLoss": 0.09770347473244582,
+    "testLoss": 0.39020404082376203
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-2-1__identity",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "gaussian-clusters__2-2-2-1__identity.json",
+   "contentHash": "sha256:0a68f1de8ce0f93dee8484b2c4fb7141525004b88cc4a04435a06604caad8da3",
+   "metrics": {
+    "trainLoss": 0.14007934452527332,
+    "testLoss": 0.12358836044152961
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-4-1__relu",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "gaussian-clusters__2-2-4-1__relu.json",
+   "contentHash": "sha256:2520461f5830c1666a5969ed258ff0958d486c226bc77716958ae293a48bb4ae",
+   "metrics": {
+    "trainLoss": 0.11421602980274673,
+    "testLoss": 0.1027544812512788
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-4-1__tanh",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "gaussian-clusters__2-2-4-1__tanh.json",
+   "contentHash": "sha256:221daa652b8d4a5b6d9cdcd3d29bcaa8aac3bb4d718dfc96fe611246b7dec1c1",
+   "metrics": {
+    "trainLoss": 0.07906605368037399,
+    "testLoss": 0.36096404062511356
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-2-4-1__identity",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "gaussian-clusters__2-2-4-1__identity.json",
+   "contentHash": "sha256:58987a49e00f6cd4719706b1d048d2c96312e7163f9be2175b323bfde0abae50",
+   "metrics": {
+    "trainLoss": 0.14007934452527332,
+    "testLoss": 0.12358836044156134
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-2-1__relu",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "gaussian-clusters__2-4-2-1__relu.json",
+   "contentHash": "sha256:167a7f63c893bee4fd99a693ad95cec81c0a9848172b3711d3341222b57e3185",
+   "metrics": {
+    "trainLoss": 0.07823945629015303,
+    "testLoss": 1.5493189598421193
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-2-1__tanh",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "gaussian-clusters__2-4-2-1__tanh.json",
+   "contentHash": "sha256:ca0be6549a3b62be780518a681b61ec49c4538d1225555b97683ac696f4d2f47",
+   "metrics": {
+    "trainLoss": 0.070323176735574,
+    "testLoss": 0.4652192366879948
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-2-1__identity",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "gaussian-clusters__2-4-2-1__identity.json",
+   "contentHash": "sha256:a74152bbbcbffaa0596003c623e85984773af7fc90d2deb2b93bc195457d6670",
+   "metrics": {
+    "trainLoss": 0.14007934452527332,
+    "testLoss": 0.12358836044152252
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-4-1__relu",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "gaussian-clusters__2-4-4-1__relu.json",
+   "contentHash": "sha256:ca426ad0ddad2de0be616fde5afc0b8db07607c7a3ed581508522e9c9b56300e",
+   "metrics": {
+    "trainLoss": 0.07697875934275115,
+    "testLoss": 1.2298752295602084
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-4-1__tanh",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "gaussian-clusters__2-4-4-1__tanh.json",
+   "contentHash": "sha256:d879d8989012857a46def2c74d1bcc96c667a107cfeac7222b4ba06de9e829ca",
+   "metrics": {
+    "trainLoss": 0.04663079891821388,
+    "testLoss": 0.3807563733693749
+   }
+  },
+  {
+   "checkpointId": "gaussian-clusters__2-4-4-1__identity",
+   "dataset": "gaussian-clusters",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "gaussian-clusters__2-4-4-1__identity.json",
+   "contentHash": "sha256:ca43ca558efe6477a9d805b7539e8c4ae833bfdc063fa5a3b4c0e2e52ed91158",
+   "metrics": {
+    "trainLoss": 0.1400793445252733,
+    "testLoss": 0.12358836044005342
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-1__none",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    1
+   ],
+   "hiddenActivation": null,
+   "url": "xor-quadrants__2-1__none.json",
+   "contentHash": "sha256:bc08742ca2e303ef8aa43cda15c837b53674d80a358a7329a3da64a556772076",
+   "metrics": {
+    "trainLoss": 0.6926920038430333,
+    "testLoss": 0.6943566188045192
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-1__relu",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "xor-quadrants__2-2-1__relu.json",
+   "contentHash": "sha256:bb3179510d31abb4853cd73dae32923e7d265ce749ea2fe1789d50c176466d85",
+   "metrics": {
+    "trainLoss": 0.35528367446221143,
+    "testLoss": 0.342700016891777
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-1__tanh",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "xor-quadrants__2-2-1__tanh.json",
+   "contentHash": "sha256:e3c399a075397727fe470dc90a50d0e8a6179d92ad34833b89693b4ec4ab6f5c",
+   "metrics": {
+    "trainLoss": 0.3541920531670817,
+    "testLoss": 0.3387803322021303
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-1__identity",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "xor-quadrants__2-2-1__identity.json",
+   "contentHash": "sha256:f388305f5b32bd6ce36b3950e0004570ce624cd8f2bd737a436b1b62f42673c0",
+   "metrics": {
+    "trainLoss": 0.6926920038430333,
+    "testLoss": 0.6943566188036989
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-1__relu",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "xor-quadrants__2-4-1__relu.json",
+   "contentHash": "sha256:bdb6cbd7b36bf9325a66f421053d457ff09e8bf313c0fd598cea70f3336bdf2a",
+   "metrics": {
+    "trainLoss": 0.23112122306191188,
+    "testLoss": 0.22751887980812446
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-1__tanh",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "xor-quadrants__2-4-1__tanh.json",
+   "contentHash": "sha256:22a167ed7c0e7d646ea93b172769118bb1486d2f3cf4d3415b3b14ef1b88a095",
+   "metrics": {
+    "trainLoss": 0.223662272812812,
+    "testLoss": 0.19957246512799362
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-1__identity",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "xor-quadrants__2-4-1__identity.json",
+   "contentHash": "sha256:823e80cbe7f63441f84e28855234dee462220951f1c2eea68ce848e297c3b58e",
+   "metrics": {
+    "trainLoss": 0.6926920038430333,
+    "testLoss": 0.6943566188332204
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-2-1__relu",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "xor-quadrants__2-2-2-1__relu.json",
+   "contentHash": "sha256:107aba5219babee5bca53fbef5ab0e8a92ad0a1b9b2d92da028c67fd99d54c22",
+   "metrics": {
+    "trainLoss": 0.2772515752978059,
+    "testLoss": 0.21343393565398858
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-2-1__tanh",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "xor-quadrants__2-2-2-1__tanh.json",
+   "contentHash": "sha256:6a7f4e159cc6fc8c22c0e22609a5b91d04e214cd3b52822e45696aa888a0b06b",
+   "metrics": {
+    "trainLoss": 0.24340851298904848,
+    "testLoss": 0.2863969212947392
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-2-1__identity",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "xor-quadrants__2-2-2-1__identity.json",
+   "contentHash": "sha256:4ac77e789ce2c30d4596c45dfd714e3608a59c8544b35e2fb46fb4168c2bdc51",
+   "metrics": {
+    "trainLoss": 0.6926920038430332,
+    "testLoss": 0.694356618803831
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-4-1__relu",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "xor-quadrants__2-2-4-1__relu.json",
+   "contentHash": "sha256:05bb2f2ab0eef98b13bcd330a1ea3eef1efb5d3c38d608170bdb670a0ff1e7ce",
+   "metrics": {
+    "trainLoss": 0.2341013132829965,
+    "testLoss": 0.20087775361443136
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-4-1__tanh",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "xor-quadrants__2-2-4-1__tanh.json",
+   "contentHash": "sha256:8b200053925084c5fe952c976284e514c62790abd7e781a6f233eedbe744f11b",
+   "metrics": {
+    "trainLoss": 0.19167576683579474,
+    "testLoss": 0.2384256207836914
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-2-4-1__identity",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    2,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "xor-quadrants__2-2-4-1__identity.json",
+   "contentHash": "sha256:b091aaf351065d14f51af1c43b8d404573f0c847737a3dae5d7041b8b9c2f867",
+   "metrics": {
+    "trainLoss": 0.6926920038430332,
+    "testLoss": 0.694356618803831
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-2-1__relu",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "xor-quadrants__2-4-2-1__relu.json",
+   "contentHash": "sha256:dca3850310ebaba4d5c1909894688f5d7f28a9a211dfb417903e261a9e76701d",
+   "metrics": {
+    "trainLoss": 0.20794212217342736,
+    "testLoss": 0.2431526529268196
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-2-1__tanh",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "xor-quadrants__2-4-2-1__tanh.json",
+   "contentHash": "sha256:d87cba60dfb7180424f408b6fbcc37b8f52740e4c8bebaa4e1951aee939a95b9",
+   "metrics": {
+    "trainLoss": 0.17496258216376165,
+    "testLoss": 0.4747245401573645
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-2-1__identity",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    2,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "xor-quadrants__2-4-2-1__identity.json",
+   "contentHash": "sha256:db6435d8fe0652f61167b9be2b9f60940044970ff71a20e00a26c6b2bbfbe7dd",
+   "metrics": {
+    "trainLoss": 0.6926920038430333,
+    "testLoss": 0.6943566188037888
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-4-1__relu",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "relu",
+   "url": "xor-quadrants__2-4-4-1__relu.json",
+   "contentHash": "sha256:cc6ae1bc29718a655287a32640309131328dca10e4cef61819eb4b6546f43c7b",
+   "metrics": {
+    "trainLoss": 0.19284045461889715,
+    "testLoss": 0.1922747474039966
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-4-1__tanh",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "tanh",
+   "url": "xor-quadrants__2-4-4-1__tanh.json",
+   "contentHash": "sha256:023304ccd2bd2b9df58701e44ee87f66ab28ebee26a0f2adb03e84b01ab68176",
+   "metrics": {
+    "trainLoss": 0.13331221162249968,
+    "testLoss": 0.43881353074724166
+   }
+  },
+  {
+   "checkpointId": "xor-quadrants__2-4-4-1__identity",
+   "dataset": "xor-quadrants",
+   "task": "classification",
+   "layerSizes": [
+    2,
+    4,
+    4,
+    1
+   ],
+   "hiddenActivation": "identity",
+   "url": "xor-quadrants__2-4-4-1__identity.json",
+   "contentHash": "sha256:f223a9fb40525ed27861e0d0f264315b62045c817ac551a6a2e1267b95a35ce4",
+   "metrics": {
+    "trainLoss": 0.6926920038430333,
+    "testLoss": 0.6943566186444083
    }
   }
  ]

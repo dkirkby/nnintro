@@ -15,9 +15,9 @@ import {
   unitParameters,
   writeParameter,
 } from "../src/model/types.js";
-import { loadCheckpoint, loadManifest } from "./fixtures.js";
+import { checkpointNamed, PRIMARY } from "./fixtures.js";
 
-const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
+const CHECKPOINT = checkpointNamed(PRIMARY);
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 const PROBE = [0.649, -0.64];
 const LIMIT = 1.5;

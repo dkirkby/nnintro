@@ -86,37 +86,76 @@ def train(dataset: Dataset, config: TrainConfig) -> TrainResult:
 
 @dataclass(frozen=True)
 class UnitDiagnostics:
-    """What one hidden unit actually contributes, over the whole domain."""
+    """What one hidden unit actually contributes, over the whole domain.
 
+    Three measurements, each the generalization of a ReLU-specific question
+    to the whole activation family:
+
+    - `relative_output_weight` answers "does anything downstream read it",
+      as a fraction of the largest such weight in its own layer.
+    - `relative_variation` answers "does it carry any signal": the standard
+      deviation of its activation over a domain grid, again relative to the
+      largest in its layer. A dead ReLU, a saturated tanh and a unit whose
+      incoming weights are ~0 all score ~0 here, which is why this replaced
+      the old active-fraction test.
+    - `positive_fraction` answers "where is its transition": the fraction of
+      the grid on which its preactivation is positive, i.e. which side of
+      the unit's own hyperplane the input falls. For ReLU that is exactly
+      the active fraction, and a value strictly between 0 and 1 means the
+      kink crosses the visible domain.
+    """
+
+    layer: int  # 1-based: the hidden layer this unit belongs to
     unit: int
-    # |output weight| relative to the largest in its layer.
     relative_output_weight: float
-    # Fraction of a domain grid on which the unit is active (a > 0).
-    active_fraction: float
+    relative_variation: float
+    positive_fraction: float
 
 
-def diagnose_units(model: DenseNet, dataset: Dataset, resolution: int = 41) -> list[UnitDiagnostics]:
-    """Measure each first hidden layer unit's reach across the input domain."""
+def _domain_grid(dataset: Dataset, resolution: int) -> np.ndarray:
     (lo1, hi1), (lo2, hi2) = dataset.domain
-    grid = np.stack(
+    return np.stack(
         np.meshgrid(
             np.linspace(lo1, hi1, resolution), np.linspace(lo2, hi2, resolution)
         ),
         axis=-1,
     ).reshape(-1, 2)
+
+
+def diagnose_units(
+    model: DenseNet, dataset: Dataset, resolution: int = 41
+) -> list[UnitDiagnostics]:
+    """Measure every hidden unit's reach across the input domain.
+
+    Every hidden layer, not just the first: a vestigial unit in the second
+    hidden layer is just as invisible in the figure, and the catalog now has
+    two-hidden-layer entries.
+    """
+    grid = _domain_grid(dataset, resolution)
     with torch.no_grad():
-        hidden = model.trace(torch.as_tensor(grid)).act[1].numpy()
-        downstream = model.layers[1].weight.detach().numpy()
-    magnitude = np.abs(downstream).max(axis=0)
-    largest = magnitude.max() if magnitude.max() > 0 else 1.0
-    return [
-        UnitDiagnostics(
-            unit=unit,
-            relative_output_weight=float(magnitude[unit] / largest),
-            active_fraction=float((hidden[:, unit] > 0).mean()),
-        )
-        for unit in range(hidden.shape[1])
-    ]
+        trace = model.trace(torch.as_tensor(grid))
+        weights = [layer.weight.detach().numpy() for layer in model.layers]
+
+    out: list[UnitDiagnostics] = []
+    # Layers 1..n-1 of the trace are the hidden ones; the last is the output.
+    for layer in range(1, len(model.layers)):
+        pre = trace.pre[layer].numpy()
+        act = trace.act[layer].numpy()
+        downstream = np.abs(weights[layer]).max(axis=0)
+        variation = act.std(axis=0)
+        largest_weight = downstream.max() or 1.0
+        largest_variation = variation.max() or 1.0
+        for unit in range(act.shape[1]):
+            out.append(
+                UnitDiagnostics(
+                    layer=layer,
+                    unit=unit,
+                    relative_output_weight=float(downstream[unit] / largest_weight),
+                    relative_variation=float(variation[unit] / largest_variation),
+                    positive_fraction=float((pre[:, unit] > 0).mean()),
+                )
+            )
+    return out
 
 
 # A checkpoint is only useful for teaching if its hidden units are visible in
@@ -125,44 +164,52 @@ def diagnose_units(model: DenseNet, dataset: Dataset, resolution: int = 41) -> l
 # leaves the rest with ~1e-6 output weights fits the tilted plane perfectly
 # and demonstrates nothing (PLAN.md section 8 on curating examples).
 SELECTION_CRITERIA = {
-    "maxTrainLoss": 1e-4,
-    # No vestigial units: every unit carries real weight downstream.
+    # No vestigial units: every hidden unit carries real weight downstream.
     "minRelativeOutputWeight": 0.05,
-    # No permanently dead units.
-    "minActiveFraction": 0.02,
-    # At least one unit whose ReLU kink crosses the visible domain, so that
-    # "a ReLU can block a downstream change" is demonstrable at all.
-    "minUnitsWithKinkInDomain": 1,
-    "kinkActiveFractionRange": [0.05, 0.95],
+    # No dead or saturated units: every hidden unit's activation varies.
+    "minRelativeVariation": 0.05,
+    # At least one hidden unit whose transition crosses the visible domain,
+    # so that "a ReLU can block a downstream change" is demonstrable at all.
+    # Identity has no transition to find, so the check does not apply to it.
+    "minUnitsWithTransitionInDomain": 1,
+    "transitionFractionRange": [0.05, 0.95],
 }
 
-
-def _selection_report(result: TrainResult, dataset: Dataset) -> dict:
+def _unit_report(result: TrainResult, dataset: Dataset) -> dict:
+    """Judge one attempt on whether its figure would be worth looking at."""
     units = diagnose_units(result.model, dataset)
-    lo, hi = SELECTION_CRITERIA["kinkActiveFractionRange"]
-    kinked = [u for u in units if lo <= u.active_fraction <= hi]
+    lo, hi = SELECTION_CRITERIA["transitionFractionRange"]
+    crossing = [u for u in units if lo <= u.positive_fraction <= hi]
+    has_hidden = len(result.config.sizes) > 2
     checks = {
-        "fits": result.train_loss <= SELECTION_CRITERIA["maxTrainLoss"],
         "noVestigialUnits": all(
             u.relative_output_weight >= SELECTION_CRITERIA["minRelativeOutputWeight"]
             for u in units
         ),
         "noDeadUnits": all(
-            u.active_fraction >= SELECTION_CRITERIA["minActiveFraction"] for u in units
+            u.relative_variation >= SELECTION_CRITERIA["minRelativeVariation"]
+            for u in units
         ),
-        "hasKinkInDomain": len(kinked)
-        >= SELECTION_CRITERIA["minUnitsWithKinkInDomain"],
+        # Vacuous without a hidden layer, and meaningless for identity, whose
+        # units have no transition anywhere.
+        "hasTransitionInDomain": (
+            not has_hidden
+            or result.config.activation == "identity"
+            or len(crossing) >= SELECTION_CRITERIA["minUnitsWithTransitionInDomain"]
+        ),
     }
     return {
         "accepted": all(checks.values()),
         "checks": checks,
-        "unitsWithKinkInDomain": [u.unit for u in kinked],
+        "unitsWithTransitionInDomain": [
+            {"layer": u.layer, "unit": u.unit} for u in crossing
+        ],
         "units": [asdict(u) for u in units],
     }
 
 
 def curate(
-    dataset: Dataset, config: TrainConfig, attempts: int = 24
+    dataset: Dataset, config: TrainConfig, attempts: int = 96
 ) -> tuple[TrainResult, dict]:
     """Train repeatedly and keep the best checkpoint that is worth showing.
 
@@ -170,35 +217,71 @@ def curate(
     model that fits. Selection is a separate, recorded step, and the report
     it returns is exported with the checkpoint so the choice is auditable
     rather than implicit.
+
+    The criteria are about *legibility*, not accuracy: they reject fits
+    whose figure would show nothing, and among the ones that survive the
+    best training loss wins. Accuracy cannot be a criterion across this
+    catalog, because the configurations that cannot fit their dataset -- a
+    linear model on XOR, a 2-2-1 on the curved surface -- are intended
+    teaching assets rather than failures (PLAN.md section 3).
+
+`attempts` has to be this large for the catalog to come out complete,
+    not as a margin of safety: the two hardest entries (the tilted plane
+    with two ReLU hidden layers) accept roughly one attempt in eight, and
+    the first acceptable seed for 2-2-2-1 is the 38th. Lowering it leaves
+    holes, which is a reportable failure rather than a silent one.
+
+    The objective is the *training* loss, deliberately not the held-out
+    loss. The explorer displays both, and choosing the attempt with the
+    best held-out loss would bias that number below its training
+    counterpart, turning the one quantity that is supposed to say something
+    about generalization into an artefact of selection.
     """
-    candidates: list[tuple[TrainResult, dict]] = []
-    rejected = 0
+    results: list[TrainResult] = []
+    diverged = 0
     for attempt in range(attempts):
         trial = TrainConfig(**{**asdict(config), "init_seed": config.init_seed + attempt})
         try:
-            result = train(dataset, trial)
+            results.append(train(dataset, trial))
         except FloatingPointError:
-            rejected += 1
-            continue
-        report = _selection_report(result, dataset)
-        if report["accepted"]:
-            candidates.append((result, report))
-        else:
-            rejected += 1
+            diverged += 1
+
+    if not results:
+        raise RuntimeError(f"every one of {attempts} attempts diverged")
+
+    judged = [(r, _unit_report(r, dataset)) for r in results]
+    candidates = [pair for pair in judged if pair[1]["accepted"]]
+    best_overall = min(r.train_loss for r in results)
 
     if not candidates:
         raise RuntimeError(
             f"no checkpoint met the selection criteria in {attempts} attempts; "
-            f"criteria: {SELECTION_CRITERIA}"
+            f"best train loss {best_overall:.3e}; "
+            f"rejected by: {_failure_tally(judged)}"
         )
-    # Among the acceptable ones, prefer the best held-out loss.
-    result, report = min(candidates, key=lambda pair: pair[0].test_loss)
+    result, report = min(candidates, key=lambda pair: pair[0].train_loss)
     report = {
         **report,
         "criteria": SELECTION_CRITERIA,
         "attempts": attempts,
+        # What legibility cost: the best training loss any attempt reached,
+        # against the best among those worth showing.
+        "bestTrainLossOverall": best_overall,
+        "bestTrainLossAccepted": result.train_loss,
         "accepted_count": len(candidates),
-        "rejected_count": rejected,
+        "rejected_count": len(results) - len(candidates),
+        "diverged_count": diverged,
+        "rejected_by": _failure_tally(judged),
         "chosen_init_seed": result.config.init_seed,
     }
     return result, report
+
+
+def _failure_tally(judged: list[tuple[TrainResult, dict]]) -> dict:
+    """How many attempts each check rejected, for the failure message."""
+    tally: dict[str, int] = {}
+    for _, report in judged:
+        for name, passed in report["checks"].items():
+            if not passed:
+                tally[name] = tally.get(name, 0) + 1
+    return tally

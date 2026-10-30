@@ -6,10 +6,10 @@ bias, and compare what the local derivative predicted against what actually
 changed.
 
 [`PLAN.md`](PLAN.md) is the design spec. **Stage 0 (the numerical and visual
-spike) is implemented**: one dataset, one network, the PyTorch export, the
-nnet-svg adapter, editable weights and biases, and the downstream-effect
-analysis.
-Stages 1–2 complete the initial release.
+spike) is implemented**, and so is the catalog growth that Stage 1 is mostly
+made of: all four datasets, all seven architectures, all three hidden
+activations — 76 checkpoints — with discrete controls that select among
+them. Stage 2 completes the initial release.
 
 ## Layout
 
@@ -26,7 +26,10 @@ frontend/tests/   vitest, including the golden-fixture comparison
 uv sync                              # create .venv from uv.lock (Python 3.12)
 uv run nnintro train                 # train the catalog -> data/
 uv run nnintro publish               # data/ -> frontend/public/data (tracked snapshot)
-uv run nnintro verify                # re-check the published snapshot
+uv run nnintro verify                # re-check the published snapshot:
+                                     # hashes, golden probes, split losses,
+                                     # and that the catalog is fully covered
+uv run nnintro train --only 2-4-1    # retrain a subset, by id substring
 uv run pytest                        # pipeline tests
 uv run pytest tests/test_export.py::test_golden_probes_reproduce_from_parameters
 
@@ -59,14 +62,24 @@ should write it.
 `uv run nnintro train` writes one JSON file per checkpoint plus a
 `manifest.json`. The browser enumerates the manifest rather than assuming the
 catalog is covered: a control must never be able to reach a configuration that
-has no checkpoint.
+has no checkpoint. The manifest carries a `datasets` array as well as its
+`checkpoints`, so the dataset control can be labelled and grouped without
+opening 19 checkpoints to find out what they share.
+
+A checkpoint is **self-contained**, which means each one carries its own copy
+of its dataset's 400 samples: the four datasets are therefore stored 19 times
+each, and the tracked snapshot is about 3.6 MB. Only one checkpoint is fetched
+at a time, so this costs page weight rather than load time. Factoring the
+samples into four dataset files would cut the snapshot to roughly a quarter of
+that, at the price of a second fetch and a checkpoint that can no longer be
+verified on its own.
 
 A checkpoint holds:
 
 | Field | Contents |
 | --- | --- |
 | `schemaVersion`, `checkpointId`, `contentHash` | provenance; the hash is SHA-256 over the canonical JSON with the hash field removed |
-| `dataset` | id, task, domain, input/target names, generator version, and the fixed seeded samples with their split membership |
+| `dataset` | id, short label, task, domain, input/target names, generator version, and the fixed seeded samples with their split membership |
 | `architecture` | layer sizes, hidden activation, output transform, loss name, weight layout, and the ReLU derivative convention |
 | `parameters` | per layer, `W` with shape `[out][in]` and `b` with shape `[out]` |
 | `training` | the full `TrainConfig`, torch version, dtype, final losses |
@@ -113,13 +126,35 @@ derivative against centered finite differences.
 
 ## Deviations from `PLAN.md`
 
-- Stage 0 trains **one** catalog entry (`tilted-plane`, `2-4-1`, ReLU) rather
-  than all 76. `CATALOG` in `cli.py` is the list to grow in Stage 1.
 - Training is followed by a **curation** step the plan calls for in section 8
-  but does not specify: `train.curate` keeps the best of 24 attempts that
-  passes `SELECTION_CRITERIA`. Without it, training reliably produces a model
-  that fits the plane perfectly through a single hidden unit and teaches
-  nothing. The chosen model's per-unit diagnostics ship under `selection`.
+  but does not specify: `train.curate` runs 96 attempts and keeps the one
+  with the lowest training loss among those that pass `SELECTION_CRITERIA`.
+  Without it, training reliably produces a model that fits the plane
+  perfectly through a single hidden unit and teaches nothing. The chosen
+  model's per-unit diagnostics ship under `selection`.
+  - The criteria are about **legibility, not accuracy**: no vestigial units,
+    no dead or saturated units, and at least one hidden unit whose transition
+    crosses the visible domain. Accuracy cannot be a criterion across this
+    catalog, because the configurations that *cannot* fit their dataset — a
+    linear model on XOR, a 2-2-1 on the curved surface — are intended
+    teaching assets (PLAN.md section 3). The report records the best training
+    loss any attempt reached alongside the best among those worth showing, so
+    what legibility cost is auditable.
+  - The objective is the **training** loss, deliberately not the held-out
+    loss. The explorer displays both, and selecting on the held-out number
+    would bias it below its training counterpart, making the one quantity
+    that is supposed to say something about generalization an artefact of
+    selection instead.
+  - 96 attempts is what the catalog needs to come out complete, not a margin:
+    the tilted plane with two ReLU hidden layers accepts about one attempt in
+    eight, and its first acceptable seed is the 38th. A configuration that
+    still cannot be curated is reported as a GAP and makes `train` exit
+    non-zero, rather than silently leaving a hole.
+- **Training and held-out samples are drawn alike on the map.** The split is
+  a number in "Prediction and loss", not a glyph to decode: the two
+  regression generators are noiseless, so their splits cannot differ, and the
+  classifiers' irreducible error is in the overlap of the classes rather than
+  in which split a point landed in.
 - There is no GitHub Pages workflow yet, though the siblings deploy from
   `main`. The build is a plain `npm run build`, so adding one is a deliberate
   step rather than a default.

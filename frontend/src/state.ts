@@ -49,6 +49,27 @@ import {
  */
 export const OPENING_PROBE = 0.5;
 
+/**
+ * The generators' targets at an arbitrary point, mirrored from
+ * `src/nnintro/datasets.py`.
+ *
+ * This is a genuine duplication of the pipeline's formulas, and it exists
+ * because a freely dragged probe is not a sample: nothing in the asset can
+ * tell the browser what the target is at a point the pipeline never
+ * sampled. Keyed by dataset id, and checked at construction against the
+ * asset's own `hasAnalyticTarget`, so adding a dataset to the catalog
+ * without adding it here fails immediately and loudly instead of silently
+ * dropping the target and the point loss from every free probe.
+ *
+ * A stochastic classification dataset has no entry on purpose: there is no
+ * label at an arbitrary point and the explorer must not invent one
+ * (PLAN.md section 3).
+ */
+const ANALYTIC_TARGETS: Record<string, (x: number[]) => number> = {
+  "tilted-plane": (x) => 0.6 * x[0] - 0.4 * x[1] + 0.2,
+  "curved-surface": (x) => Math.sin(Math.PI * x[0]) * Math.cos(Math.PI * x[1]),
+};
+
 export type Provenance =
   | { kind: "pretrained"; checkpointId: string }
   | { kind: "random"; seed: number }
@@ -133,6 +154,14 @@ interface HistoryEntry {
 export function createExplorer(checkpoint: Checkpoint): Explorer {
   const activation: Activation = hiddenActivation(checkpoint.architecture);
   const { dataset } = checkpoint;
+  const analytic = ANALYTIC_TARGETS[dataset.id] ?? null;
+  if (dataset.hasAnalyticTarget && analytic === null) {
+    throw new Error(
+      `${dataset.id} declares an analytic target but the browser has no ` +
+        `formula for it: add one to ANALYTIC_TARGETS, or a free probe will ` +
+        `silently lose its target and its point loss`,
+    );
+  }
 
   let baseline: HistoryEntry = {
     parameters: cloneParameters(checkpoint.parameters),
@@ -172,13 +201,8 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
     // A free probe gets a target only where the generator defines one at
     // every point. A stochastic classification dataset does not, and an
     // arbitrary point is not silently given a label.
-    const target = dataset.hasAnalyticTarget ? analyticTarget(probe.x) : null;
+    const target = analytic === null ? null : analytic(probe.x);
     return { x: probe.x, target };
-  }
-
-  function analyticTarget(x: number[]): number | null {
-    if (dataset.id === "tilted-plane") return 0.6 * x[0] - 0.4 * x[1] + 0.2;
-    return null;
   }
 
   function evaluate(): Snapshot {
