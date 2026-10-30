@@ -8,6 +8,9 @@
  * from the map. The crosshairs are one pair of lines that crosses all three:
  * where they meet is the probe, and each slice meets its own curve there.
  *
+ * The map carries its own two axes as thin dashed lines through the origin,
+ * so a position on it can be read without counting from the edges.
+ *
  * The slice backgrounds are the output scale, so a slice's height and its
  * background are two readings of the same number. The inputs have no colour
  * of their own: their axes carry their numbers.
@@ -127,6 +130,17 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
     const py = toPixelY(snapshot.x[1]);
 
     const marks: SVGElement[] = [];
+    // The two input axes, where each input is zero. Thin and dashed, under
+    // everything else: they are a reference for reading a position off the
+    // map, not a quantity, and a domain that excludes zero simply has none.
+    if (x1lo < 0 && 0 < x1hi) {
+      const zero = toPixelX(0);
+      marks.push(line(zero, 0, zero, MAP, "map-axis"));
+    }
+    if (x2lo < 0 && 0 < x2hi) {
+      const zero = toPixelY(0);
+      marks.push(line(0, zero, MAP, zero, "map-axis"));
+    }
     if (showSamples) {
       dataset.samples.y.forEach((y, n) => {
         const mark = document.createElementNS(SVG, "circle");

@@ -86,14 +86,59 @@ button {
 button:hover { border-color: var(--accent); }
 button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
+/* A panel's explanation, asked for rather than always on. The popup is
+   placed beside its panel by view/help.ts, so it never covers it; it is
+   fixed, so that placement is against the viewport. */
+h2.has-help { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.help-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+.help-popup {
+  position: fixed;
+  z-index: 20;
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.help-popup[hidden] { display: none; }
+.help-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.help-head h3 { margin: 0 0 8px; }
+.help-close { padding: 1px 7px; line-height: 1.2; border-radius: 6px; }
+.help-body { margin: 0; }
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
-.stack { grid-column: 2; display: grid; gap: 16px; align-content: start; }
-.inspector { grid-column: 1 / -1; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.column, .stack { display: grid; gap: 16px; align-content: start; }
+.stack { grid-column: 2; }
+/* Each panel as wide as its own content, not as wide as its neighbour: the
+   neuron panel has a plot beside its table and needs the room; the
+   prediction readouts do not. They wrap when the row runs out. */
+.inspector {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+.inspector > .panel { flex: 0 1 auto; min-width: 0; }
 
 .panel {
   background: var(--surface-2);
@@ -142,6 +187,10 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 }
 .slice-gradient, .slice-marks { position: absolute; inset: 0; width: 100%; height: 100%; }
 .slice-zero { stroke: var(--ink-dim); stroke-width: 0.75; stroke-dasharray: 3 3; }
+/* The map's own two axes, where an input is zero. Lighter than the
+   slices' zero line, because the surface behind it is a value and these
+   are only a reference. */
+.map-axis { stroke: var(--ink-dim); stroke-width: 0.75; stroke-dasharray: 3 3; opacity: 0.6; }
 .slice-curve-casing { fill: none; stroke: var(--surface); stroke-width: 3.5; stroke-linejoin: round; opacity: 0.85; }
 .slice-curve { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
 .slice-point { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
@@ -178,9 +227,22 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .sample { stroke: var(--ink-dim); stroke-width: 0.8; }
 .sample.is-test { stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 2 2; }
 
-/* Parameters -> output: one line per parameter, the parameter colour scale
-   as the x axis, and the slider on that same axis under it. */
+/* Parameters -> output: one line per parameter of the selected unit, the
+   parameter colour scale as the x axis, and one slider per parameter on that
+   same axis under it.
+
+   The plot, the colour bar and every slider are one grid column wide, so a
+   dot's x position and its slider's thumb are the same place on one axis;
+   the parameter's symbol and its value flank that column. */
+.param-editor {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 7px;
+  row-gap: 4px;
+}
 .param-plot {
+  grid-column: 2;
   display: block;
   width: 100%;
   height: auto;
@@ -189,29 +251,66 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
   /* The output scale is painted on as a background image per render. */
   background-color: var(--surface);
 }
-.param-curve { fill: none; stroke: var(--ink); stroke-width: 1; opacity: 0.4; }
-.param-curve.is-selected { stroke: var(--ink); stroke-width: 2.5; opacity: 1; }
-.param-dot { fill: var(--surface); stroke: var(--ink); stroke-width: 1; }
-.param-dot.is-selected { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
+.param-curve { fill: none; stroke: var(--ink); stroke-width: 1.5; opacity: 0.75; }
+.param-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
+/* Which line is which: the symbol sits over the dot, on the output line the
+   curve passes through, so it names the curve at the one point every curve
+   is guaranteed to touch. */
+.param-symbol {
+  font-size: 10px;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 2.5px;
+}
 .output-level { stroke: var(--ink); stroke-width: 1.25; stroke-dasharray: 5 3; }
 .param-zero { stroke: var(--ink-dim); stroke-width: 0.75; opacity: 0.5; }
 
 .param-axis {
+  grid-column: 2;
   display: flex;
   border: 1px solid var(--line);
   border-radius: 4px;
   align-items: center;
   justify-content: space-between;
   height: 14px;
-  margin-top: 6px;
+  margin-top: 2px;
   padding: 0 4px;
   font-size: 9px;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 .param-axis span { text-shadow: 0 0 2px var(--surface), 0 0 2px var(--surface); }
-.param-slider { width: 100%; margin: 6px 0 0; }
-.param-slider:disabled { opacity: 0.45; }
+.param-slider { grid-column: 2; width: 100%; margin: 0; }
+.param-row-name {
+  grid-column: 1;
+  font-size: 0.82rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.param-row-value {
+  grid-column: 3;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 6ch;
+  text-align: right;
+}
+
+/* Parameter tensors: shapes, not values. Drawn at its natural size, so the
+   slots stay slot-sized however wide the panel is. */
+/* Only as wide as the diagram and its own heading: a schematic of a dozen
+   slots does not need the whole column. */
+.tensor-panel { justify-self: start; max-width: 100%; }
+.tensor-map { display: block; max-width: 100%; height: auto; overflow: visible; }
+/* Ink, not --line: the frame has to stay visible over the selection band. */
+.tensor-frame { fill: none; stroke: var(--ink-dim); stroke-opacity: 0.55; stroke-width: 1; }
+.tensor-dot { fill: var(--ink-dim); opacity: 0.45; }
+/* Selection is black here too: the band is an ink wash, not a colour that
+   could be mistaken for a value on one of the two parameter scales. */
+.tensor-band { fill: var(--ink); fill-opacity: 0.13; }
+.tensor-block { cursor: help; }
+.tensor-caption { font-size: 9px; fill: var(--ink-dim); }
 
 /* Network */
 .dn-root { width: 100%; height: auto; }
@@ -238,21 +337,65 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .edge-target { stroke: transparent; stroke-width: 12; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Readouts */
-.row { display: flex; flex-wrap: wrap; gap: 8px; padding: 3px 0; align-items: baseline; }
-.row-label { flex: 1 1 auto; color: var(--ink-dim); font-size: 0.85rem; }
-.row-value { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-.row-hint { flex: 1 0 100%; font-size: 0.78rem; }
+/* Readouts: two columns, each only as wide as its own widest entry, so the
+   values sit next to their labels instead of at the far edge of the panel.
+   The rows are `display: contents` so every row shares those two columns,
+   and a hint spans both and takes a line of its own. */
+.readouts {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: start;
+  align-items: baseline;
+  column-gap: 20px;
+  row-gap: 6px;
+}
+.row { display: contents; }
+.row-label { color: var(--ink-dim); font-size: 0.85rem; }
+.row-value { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.row-hint { grid-column: 1 / -1; margin-top: -2px; font-size: 0.78rem; }
 
-.editor { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.editor input[type="range"] { flex: 1 1 140px; }
-.value-input { width: 9ch; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
-
-table.contributions { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 10px; }
+/* As wide as its numbers, not as wide as the panel: the columns of a sum
+   belong next to each other. */
+table.contributions { width: auto; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 10px; }
 table.contributions caption { text-align: left; color: var(--ink-dim); padding-bottom: 6px; }
-table.contributions th, table.contributions td { text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-table.contributions th:first-child, table.contributions td:first-child { text-align: left; }
-tr.is-blocked td { color: var(--ink-dim); font-style: italic; }
+table.contributions th, table.contributions td { text-align: right; padding: 3px 0 3px 18px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.contributions th:first-child, table.contributions td:first-child { text-align: left; padding-left: 0; }
+
+/* The activation function with the selected unit's own (z, a) on it. Square,
+   with one scale on both axes, so the identity and ReLU's on-arm are both at
+   45° and what the frame shows is the function's own shape. The range holds
+   this unit's z with headroom, so the dot stays off the frame; it is the
+   trace's z and a, so every edit slides the dot along the curve. */
+.phi-plot {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  margin: 2px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.phi-axis { stroke: var(--ink-dim); stroke-width: 0.75; opacity: 0.6; }
+.phi-curve { fill: none; stroke: var(--ink); stroke-width: 1.75; stroke-linejoin: round; }
+.phi-guide { stroke: var(--ink-dim); stroke-width: 0.75; stroke-dasharray: 3 3; }
+.phi-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
+
+/* The neuron panel: its arithmetic on the left, the activation plot to the
+   right of it while the panel is wide enough, wrapping underneath when it
+   is not. */
+.neuron-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+/* Content width, not the panel's: the plot sits next to the arithmetic
+   rather than away at the far edge. */
+.neuron-math { flex: 0 1 auto; min-width: 0; }
+.neuron-body .phi-plot { flex: 0 1 190px; margin: 0; }
+
+/* The neuron's arithmetic in words: what the table sums to, and what the
+   activation does with it. The value is the end of the sentence, so it is
+   not right-aligned away from the expression it belongs to. */
+.formula { margin: 4px 0; font-size: 0.85rem; }
+.formula-value { font-variant-numeric: tabular-nums; }
+.formula-note { margin: 2px 0 6px; font-size: 0.78rem; color: var(--ink-dim); }
 
 .comparison { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .status { margin-top: 16px; }
@@ -260,6 +403,7 @@ tr.is-blocked td { color: var(--ink-dim); font-style: italic; }
 @media (max-width: 860px) {
   .workspace { grid-template-columns: 1fr; }
   .stack { grid-column: 1; }
+  .inspector > .panel { flex: 1 1 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

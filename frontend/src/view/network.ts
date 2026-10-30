@@ -10,16 +10,17 @@ import { createDenseNetworkSvg, layoutDenseNetwork } from "nnet-svg";
 import type { EdgeRef, NodeRef } from "nnet-svg";
 
 import type { Snapshot } from "../state.js";
-import { sameParameter, type ParameterRef } from "../model/types.js";
+import { sameUnit, type UnitRef } from "../model/types.js";
 import { createColorScale, niceLimit, type ColorScale, type Palette } from "./colormap.js";
 import {
   edgeContribution,
   edgeKey,
-  edgeParameter,
+  edgeUnit,
   edgeWeight,
   nodeBias,
   nodeKey,
   nodeParameter,
+  nodeUnit,
 } from "./adapter.js";
 
 /**
@@ -53,7 +54,12 @@ export const NODE_LEGEND =
 export interface NetworkViewOptions {
   container: HTMLElement;
   layerSizes: number[];
-  onSelect: (ref: ParameterRef | null) => void;
+  /**
+   * The unit the click landed on: a node's own unit, or the unit an edge
+   * feeds. Null for an input node, which owns no parameters — the one click
+   * that selects nothing, since there is no way to deselect.
+   */
+  onSelect: (unit: UnitRef | null) => void;
   /** Scoped per instance so several explorers can share a page. */
   idPrefix: string;
 }
@@ -100,6 +106,9 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
 
   function render(snapshot: Snapshot, mode: DisplayMode, palette: Palette): void {
     const { parameters, trace, selection } = snapshot;
+    /** One unit is selected: its node, and every edge feeding that node. */
+    const isSelectedUnit = (unit: UnitRef | null) =>
+      unit !== null && sameUnit(unit, selection);
     // Contributions are still a parameter-family quantity -- an edge is an
     // edge -- but they need their own limit, since w·a is not w.
     const contributionScale = createColorScale(
@@ -128,8 +137,8 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       classPrefix: "dn",
       title: "Dense neural network",
       desc:
-        `A ${layerSizes.join("-")} network. Select an edge to edit its weight, ` +
-        "or a node to edit its bias.",
+        `A ${layerSizes.join("-")} network. Select a node, or any edge into ` +
+        "it, to work on that unit: its bias and every weight feeding it.",
       // Always the activation: the bias is the colour, not the number.
       nodeValue: (node: NodeRef) => trace.act[node.layerIndex]?.[node.nodeIndex],
       edgeValue: (edge: EdgeRef) =>
@@ -138,7 +147,7 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
           : edgeWeight(parameters, edge),
       nodeAttrs: (node) => {
         const ref = nodeParameter(node);
-        const selected = ref && selection && sameParameter(ref, selection);
+        const selected = isSelectedUnit(nodeUnit(node));
         return {
           fill: nodeFill(node),
           class: selected ? "is-selected" : "",
@@ -152,8 +161,7 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
         };
       },
       edgeAttrs: (edge) => {
-        const ref = edgeParameter(edge);
-        const selected = selection && sameParameter(ref, selection);
+        const selected = isSelectedUnit(edgeUnit(edge));
         const scale = mode === "contributions" ? contributionScale : palette.param;
         const value = edge.value ?? 0;
         const faint = Math.abs(value) < FAINT_FRACTION * scale.limit;
@@ -194,11 +202,11 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
   }
 
   /**
-   * Two layers the renderer does not provide: the selected edge's outline,
-   * under the edges so the weight's own colour stays on top, and a wide
-   * transparent line over each edge so a hairline is still clickable. The
-   * targets go between the edges and the nodes, or they would swallow
-   * clicks meant for a node.
+   * Two layers the renderer does not provide: rails alongside each selected
+   * edge — every edge into the selected unit — under the edges so each
+   * weight's own colour stays on top, and a wide transparent line over each
+   * edge so a hairline is still clickable. The targets go between the edges
+   * and the nodes, or they would swallow clicks meant for a node.
    */
   function decorate(
     svg: SVGSVGElement,
@@ -218,14 +226,13 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
     targets.setAttribute("aria-hidden", "true");
 
     for (const edge of layout.edges) {
-      const ref = edgeParameter(edge);
       const value =
         mode === "contributions"
           ? edgeContribution(parameters, trace.act, edge)
           : edgeWeight(parameters, edge);
       const faint = Math.abs(value ?? 0) < FAINT_FRACTION * scale.limit;
 
-      if (selection && sameParameter(ref, selection)) {
+      if (sameUnit(edgeUnit(edge), selection)) {
         // Two thin rails alongside, rather than one wider line underneath:
         // the edge keeps its own colour and thickness, and the selection
         // reads as an outline instead of a darkened edge.
@@ -251,33 +258,35 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
     edges.after(targets);
   }
 
-  function refFromTarget(target: EventTarget | null): ParameterRef | null | undefined {
+  /**
+   * `undefined` for a click that missed everything, as distinct from `null`
+   * for an input node, which is a hit on something that owns no parameters.
+   */
+  function unitFromTarget(target: EventTarget | null): UnitRef | null | undefined {
     if (!(target instanceof Element)) return undefined;
     const key = target.closest("[data-key]")?.getAttribute("data-key");
     if (!key) return undefined;
     const [kind, a, b, c] = key.split(":");
     if (kind === "e") {
-      return edgeParameter({
-        sourceLayerIndex: Number(a),
-        sourceNodeIndex: Number(b),
-        targetNodeIndex: Number(c),
-      });
+      // The unit the edge feeds, not the edge: clicking one weight selects
+      // the whole of the destination neuron's z = Σ wᵢaᵢ + b.
+      return edgeUnit({ sourceLayerIndex: Number(a), targetNodeIndex: Number(c) });
     }
-    return nodeParameter({ layerIndex: Number(a), nodeIndex: Number(b) });
+    return nodeUnit({ layerIndex: Number(a), nodeIndex: Number(b) });
   }
 
   function handleActivate(event: Event): void {
-    const ref = refFromTarget(event.target);
-    if (ref === undefined) return;
-    onSelect(ref);
+    const unit = unitFromTarget(event.target);
+    if (unit === undefined) return;
+    onSelect(unit);
   }
 
   function handleKey(event: KeyboardEvent): void {
     if (event.key !== "Enter" && event.key !== " ") return;
-    const ref = refFromTarget(event.target);
-    if (ref === undefined) return;
+    const unit = unitFromTarget(event.target);
+    if (unit === undefined) return;
     event.preventDefault();
-    onSelect(ref);
+    onSelect(unit);
   }
 
   return {

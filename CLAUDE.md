@@ -33,22 +33,93 @@ The "Inputs → output" panel is one figure on shared axes: the ŷ(x₁, x₂) m
 rotated so x₂ still runs upward and ŷ grows away from the map. One pair of
 crosshairs crosses all three and each slice's curve meets it at the
 prediction, so a misaligned axis shows up immediately; `tests/view.dom.test.ts`
-pins the alignment. It opens with no samples drawn and the probe at the centre
-of the domain: the panel is there to be probed first, and `Show samples` is an
-explicit opt-in.
+pins the alignment. The map also draws its own two axes — thin dashed lines
+where each input is zero, under the samples and the crosshairs — so a
+position can be read without counting in from the edges. It opens with no
+samples drawn and the probe at `OPENING_PROBE` (`state.ts`), 0.5 in each
+input, clamped into that input's domain: the panel is there to be probed
+first, `Show samples` is an explicit opt-in, and the probe starts off the
+axes it would otherwise hide, with no input term of the first layer's sums
+zeroed.
 
 The display modes now only switch what the **edges** show (weight or
 contribution). Node fills never vary with the mode.
 
-"Parameters → output" superimposes one curve per parameter: the output as
+"Parameter Tensors" (`view/tensors.ts`) is the parameters by shape rather
+than by value: one group per parameter layer, left to right, each the bias
+vector drawn above its weight matrix, with one light dot per slot and no
+numbers. A **column** of a group is one destination unit — its bias and
+every weight feeding it — so the selected unit shades as a single vertical
+band across both rectangles, which is the same thing the network panel's
+selection means. Rows of a weight matrix are the sources. (The columns run
+this way round because the bias strip sits above the matrix and has to line
+up with it.) Each rectangle carries an SVG `<title>`, so hovering names it:
+"2×4 weights connecting the input layer to hidden layer 1".
+
+Each of the four plot panels keeps its explanation in a popup behind a `?`
+in its heading rather than printed underneath it (`view/help.ts`). The popup
+is a child of `document.body` and is placed **beside** its panel — right if
+there is room, else left, else below — so it never covers the thing it
+explains. `createHelp` *moves* the legend element into the popup instead of
+copying its text, so whatever writes that text (`main.ts` for two panels,
+`paramspace.ts` for its own) keeps the popup current; `main.ts` therefore
+holds those elements by reference, since they are no longer reachable
+through `#app`.
+
+**Selection is a *unit*, not a single parameter, and is never empty.**
+Clicking a node selects that neuron and every edge feeding it; clicking an
+edge selects the neuron it *feeds*, with its siblings into the same neuron.
+The explorer opens on the output unit and its final-layer edges. An input
+node owns no parameters, so clicking one selects nothing and leaves the
+current unit alone: there is no way to deselect. `UnitRef` and
+`unitParameters` (`model/types.ts`) are the whole vocabulary; the latter
+orders a unit's parameters the way the UI lists them — the bias first, then
+the weights by source index, which is top to bottom as nnet-svg draws them.
+
+"Parameters → output" superimposes one curve per parameter **of the selected
+unit** — its bias and the weights feeding it, nothing else: the output as
 that parameter alone is swept across the parameter scale, everything else
 held. Every curve passes through the current output at the current value, so
 **every dot lands on the horizontal output line** — the quickest check that
-the panel is right, and what `tests/view.dom.test.ts` asserts. The parameter
-colour bar is that panel's x axis, its background is the output scale stood
-up (so a curve's height and the colour behind it are the same number), and
-the editing slider sits under the bar on the same axis; the inspector keeps
-the typed value and the restore button for values beyond the axis.
+the panel is right, and what `tests/view.dom.test.ts` asserts. Each curve is
+named at its dot (`b`, `w₀`, …) and has one slider under the plot in the
+same order. The parameter colour bar is that panel's x axis, its background
+is the output scale stood up (so a curve's height and the colour behind it
+are the same number), and the plot, the bar and every slider share one grid
+column so all of them are the same axis. Those sliders are now the only way
+to edit a parameter: the inspector's parameter table and its per-parameter
+restore button are **removed**, so values beyond the ends of that axis are
+unreachable until something replaces them.
+
+The inspector is two panels: "Prediction and loss", which also carries the
+predicted-vs-actual comparison after an edit, and "Neuron: …", which reads
+top to bottom as the neuron computes: one table row per input term (`i=n`,
+`wᵢ`, `aᵢ`, `wᵢ·aᵢ` — no bias row, since the bias is not a term of the sum),
+then `Preactivation z = Σ wᵢ aᵢ + bias = …` and `Activation a = ReLU(z) = …`
+written out with their values, and beside all of that — to the right while
+the panel is wide enough, wrapping underneath when it is not — **a plot of
+the activation function with that unit's own (z, a) marked on it**. Nothing
+follows it. The slope `φ′(z)` stays among those lines because it is the only
+place the ReLU convention is disclosed (PLAN.md section 4). Both panels'
+numbers sit next to their labels rather than at the far edge: the readouts
+are a two-column grid of `max-content` (the rows are `display: contents`)
+and the contributions table is `width: auto`. The inspector row is a wrapping
+flex row of content-width panels, not equal columns: the neuron panel needs
+the room its plot takes and the prediction readouts do not.
+
+The line under the panels is standing instructions only. It used to
+announce each edit (`W[0][2][0]: -0.642 → -0.645`); an edit's before and
+after are already in the slider's readout and in the predicted-vs-actual
+comparison, so nothing below the fold changes as the explorer is used and
+nothing down there can go stale. The plot is
+square with one scale on both axes, so the identity and ReLU's on-arm are
+both at 45° and what the frame shows is the function's own shape; the output
+layer applies no nonlinearity, so its unit plots the identity. z and a come
+from the trace, so moving the bias slider — or any weight of that unit —
+slides the dot along the curve, which itself never moves. The axis range is
+the smallest round number holding that z with 5% headroom, so the dot cannot
+land on the frame and the range only steps when z really outgrows it.
+`tests/view.dom.test.ts` asserts the dot is a point *of* the drawn curve.
 
 Stage 1 is mostly catalog growth: `CATALOG` in `src/nnintro/cli.py` has one
 entry and needs the other 75, and the UI needs the depth/width/activation
@@ -109,20 +180,21 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
 
 - `model/evaluate.ts` is the source of mathematical truth — forward pass,
   input sensitivity, point and mean-loss gradients. No DOM import belongs here.
-- `model/ripple.ts` decides what an edit actually changed. Its animated
-  counterpart (`view/ripple.ts`, zipline) is **removed for now** at the
-  user's request; the inspector's "Downstream effect" table still shows the
-  reachable-vs-changed distinction, and `@dkirkby/zipline` stays in
-  `package.json` against the animation coming back.
+- `model/ripple.ts` decides what an edit actually changed. Nothing in the UI
+  displays it any more: its animated counterpart (`view/ripple.ts`, zipline)
+  and then the inspector's "Downstream effect" table were both removed at
+  the user's request. The module and `tests/ripple.test.ts` are kept, as is
+  `@dkirkby/zipline` in `package.json`, against the animation coming back.
 - `model/surface.ts` evaluates the prediction surface over the input domain,
   and the one-input slices through the probe. `main.ts` recomputes the
   surface only when the parameters change; the slices follow the probe and
   are recomputed every render.
 - `model/curves.ts` sweeps one parameter at a time with everything else
-  held, for the "Parameters → output" panel. It mutates a private copy: the
-  explorer's own parameters must come back untouched.
-- `state.ts` owns the baseline/working split, selection, history, and the one
-  versioned snapshot every view consumes.
+  held, for the "Parameters → output" panel. The caller names the parameters
+  to sweep (the selected unit's). It mutates a private copy: the explorer's
+  own parameters must come back untouched.
+- `state.ts` owns the baseline/working split, the selected unit, history, and
+  the one versioned snapshot every view consumes.
 - `view/adapter.ts` is the **only** place model and renderer indices meet.
 - `view/colormap.ts` owns both colour maps. `main.ts` builds one
   `Palette` per render and hands the same object to both panels.
@@ -165,18 +237,29 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   because the view box (680 units) is wider than the panel that renders it,
   so a 1-unit stroke lands under a pixel and reads as nothing at all.
 - **Selection is black, never the accent.** The accent green is a parameter
-  colour now. A selected node takes a thick ink outline of its own; a
-  selected edge keeps its own colour *and* its own thickness and is railed
-  by two thin ink lines, one along each side, offset along the edge's normal
-  in a group inserted before `.dn-edges`.
+  colour now. The selected unit's node takes a thick ink outline of its own;
+  each edge feeding it keeps its own colour *and* its own thickness and is
+  railed by two thin ink lines, one along each side, offset along the edge's
+  normal in a group inserted before `.dn-edges`. So a selection is one node
+  plus one rail pair per incoming edge, never a lone edge.
+- **The parameters-to-output axis is fitted to the selected unit's sweeps,
+  with 5% headroom.** It is the one axis in the app that is *not* a fixed
+  scale, because a dead ReLU's sweeps move the output by almost nothing and
+  a shared axis would flatten them to a line. The headroom exists for the
+  case where the current output is itself the extreme of every sweep —
+  common when the unit is off — which would otherwise draw the output line
+  along the frame. `view/colormap.ts`'s `niceLimit` snaps its result back to
+  12 significant digits because that number is printed as a tick. The
+  neuron panel's activation plot is fitted the same way, for the same
+  reason: its dot has to stay inside the frame as an edit moves it.
 - **The slices' value axis is the output scale, not their own range.** That
   is what makes a slice's height and its background two readings of one
   number, and its ticks are the only numbers the output scale has. Fitting
   the axis to the curve would read better in isolation and break the panel.
 - **`state.ts` records an edit BEFORE it notifies subscribers.** The views
-  build the ripple and the predicted-vs-actual comparison from `lastEdit()`
-  inside the subscription; assigning after `commit()` hands them the previous
-  edit, and both silently vanish. `tests/state.test.ts` pins this.
+  build the predicted-vs-actual comparison from `lastEdit()` inside the
+  subscription; assigning after `commit()` hands them the previous edit, and
+  the comparison silently vanishes. `tests/state.test.ts` pins this.
 
 ## Design decisions that are load-bearing
 

@@ -10,6 +10,11 @@
  *
  * Every curve passes through the current output at the current value, which
  * is why the dots all land on one horizontal line.
+ *
+ * The caller names the parameters to sweep — the selected unit's, in the
+ * order the panel lists them (`unitParameters`) — rather than all of them:
+ * a thicket of every weight in the network invited comparisons between
+ * parameters that have nothing to do with each other.
  */
 
 import { forward } from "./evaluate.js";
@@ -46,6 +51,7 @@ export function parameterCurves(
   activation: Activation,
   x: number[],
   limit: number,
+  refs: ParameterRef[],
   samples: number = DEFAULT_CURVE_SAMPLES,
 ): ParameterCurve[] {
   // One working copy, mutated and put back: the caller's parameters are the
@@ -55,7 +61,7 @@ export function parameterCurves(
     b: layer.b.slice(),
   }));
 
-  return parameterRefs(parameters).map((ref) => {
+  return refs.map((ref) => {
     const current = read(working, ref);
     const values: number[] = [];
     const outputs: number[] = [];

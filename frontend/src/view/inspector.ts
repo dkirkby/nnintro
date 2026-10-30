@@ -1,33 +1,37 @@
 /**
- * The inspector: what the selected neuron computes, what the selected
- * parameter does, and how the local slope compares with the actual change.
+ * The inspector: what the selected neuron computes, and how the local slope
+ * compares with the actual change.
+ *
+ * The neuron panel carries a plot of the activation function itself with the
+ * unit's own (z, a) marked on it, so the arithmetic above it (z = Σ wᵢ aᵢ + b)
+ * and the nonlinearity after it are one picture. Editing any of the unit's
+ * parameters moves the dot along that curve.
  *
  * Every number appears as a number. Colour and SVG picking are a second
  * channel, never the only one (PLAN.md section 4).
  */
 
-import { activationDerivative } from "../model/evaluate.js";
-import { describeRipple, type Ripple } from "../model/ripple.js";
-import {
-  describeParameter,
-  readParameter,
-  type Activation,
-  type ParameterRef,
-} from "../model/types.js";
+import { activationDerivative, applyActivation } from "../model/evaluate.js";
+import type { Activation, UnitRef } from "../model/types.js";
 import type { EditRecord, Snapshot } from "../state.js";
+import { niceLimit } from "./colormap.js";
 import { format } from "./network.js";
+
+const SVG = "http://www.w3.org/2000/svg";
+/** Square: both axes carry one scale, so a 45° line really is the identity. */
+const PHI = { size: 150, pad: 12 };
+/** Odd, so z = 0 is sampled exactly and ReLU's kink is a corner. */
+const PHI_SAMPLES = 81;
 
 export interface InspectorOptions {
   container: HTMLElement;
   activation: Activation;
   targetName: string;
   inputNames: string[];
-  onEdit: (ref: ParameterRef, value: number) => void;
-  onRestore: (ref: ParameterRef) => void;
 }
 
 export interface Inspector {
-  render(snapshot: Snapshot, edit: EditRecord | null, ripple: Ripple | null): void;
+  render(snapshot: Snapshot, edit: EditRecord | null): void;
 }
 
 function row(label: string, value: string, hint?: string): HTMLElement {
@@ -44,126 +48,142 @@ function row(label: string, value: string, hint?: string): HTMLElement {
   return element;
 }
 
-export function createInspector(options: InspectorOptions): Inspector {
-  const { container, activation, onEdit, onRestore } = options;
+/**
+ * The activation function, with this unit's own (z, a) on it.
+ *
+ * Both axes span the same range on the same scale, so the identity runs at
+ * 45° and so does ReLU's on-arm: the shape in the frame is the function's,
+ * not the frame's. That range is the smallest round number that holds this
+ * unit's z with a little headroom, so the dot can never sit on the frame or
+ * outside it, and the axis only moves a ladder stop when z really outgrows
+ * it rather than rescaling under every drag.
+ *
+ * z and a come straight from the trace, so an edit to the bias — or to any
+ * weight feeding this unit — slides the dot along the curve on the next
+ * render. The curve itself is the activation function and does not move.
+ */
+function activationPlot(name: Activation, z: number, a: number): SVGElement {
+  const limit = niceLimit([z * 1.05, a * 1.05, 1]);
+  const span = PHI.size - 2 * PHI.pad;
+  const toX = (value: number) => PHI.pad + ((value + limit) / (2 * limit)) * span;
+  const toY = (value: number) => PHI.size - PHI.pad - ((value + limit) / (2 * limit)) * span;
 
-  function neuronSection(snapshot: Snapshot, ref: ParameterRef): HTMLElement {
+  const marks: SVGElement[] = [];
+  marks.push(line(PHI.pad, toY(0), PHI.size - PHI.pad, toY(0), "phi-axis"));
+  marks.push(line(toX(0), PHI.pad, toX(0), PHI.size - PHI.pad, "phi-axis"));
+
+  const points: string[] = [];
+  for (let i = 0; i < PHI_SAMPLES; i += 1) {
+    const value = -limit + (2 * limit * i) / (PHI_SAMPLES - 1);
+    points.push(`${toX(value).toFixed(2)},${toY(applyActivation(name, value)).toFixed(2)}`);
+  }
+  const curve = document.createElementNS(SVG, "polyline");
+  curve.setAttribute("points", points.join(" "));
+  curve.setAttribute("class", "phi-curve");
+  marks.push(curve);
+
+  // Down to the z axis and across to the a axis, so the dot is readable as a
+  // pair of values and not only as a position.
+  marks.push(line(toX(z), toY(a), toX(z), toY(0), "phi-guide"));
+  marks.push(line(toX(z), toY(a), toX(0), toY(a), "phi-guide"));
+
+  const dot = document.createElementNS(SVG, "circle");
+  dot.setAttribute("cx", toX(z).toFixed(2));
+  dot.setAttribute("cy", toY(a).toFixed(2));
+  dot.setAttribute("r", "3.5");
+  dot.setAttribute("class", "phi-dot");
+  marks.push(dot);
+
+  marks.push(tick("z", PHI.size - PHI.pad, toY(0) - 4, "end"));
+  marks.push(tick("a", toX(0) + 4, PHI.pad - 3, "start"));
+  // One pair of numbers for both axes, since they share a scale.
+  marks.push(tick(`−${limit}`, PHI.pad, PHI.size - 2, "start"));
+  marks.push(tick(`+${limit}`, PHI.size - PHI.pad, PHI.size - 2, "end"));
+
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("viewBox", `0 0 ${PHI.size} ${PHI.size}`);
+  svg.setAttribute("class", "phi-plot");
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    `${name} from −${limit} to ${limit}; this unit sits at z = ${format(z)}, ` +
+      `a = ${format(a)}.`,
+  );
+  svg.dataset.activation = name;
+  svg.replaceChildren(...marks);
+  return svg;
+}
+
+export function createInspector(options: InspectorOptions): Inspector {
+  const { container, activation } = options;
+
+  function neuronSection(snapshot: Snapshot, selected: UnitRef): HTMLElement {
     const section = document.createElement("section");
     section.className = "panel";
-    const layer = ref.layer;
-    const unit = ref.out;
+    const layer = selected.layer;
+    const unit = selected.out;
     const z = snapshot.trace.pre[layer + 1][unit];
     const a = snapshot.trace.act[layer + 1][unit];
     const inputs = snapshot.trace.act[layer];
     const weights = snapshot.parameters[layer].W[unit];
-    const bias = snapshot.parameters[layer].b[unit];
     const isOutput = layer === snapshot.parameters.length - 1;
+    // The output layer applies no nonlinearity, which is the identity: the
+    // plot says so by being a straight 45° line through the origin.
+    const phi: Activation = isOutput ? "identity" : activation;
 
     const heading = document.createElement("h3");
     heading.textContent = `Neuron: layer ${layer + 1}, unit ${unit}`;
     section.append(heading);
 
+    // The arithmetic on the left, the activation plot on the right when the
+    // panel is wide enough for both; it wraps underneath when it is not.
+    const layout = document.createElement("div");
+    layout.className = "neuron-body";
+    const math = document.createElement("div");
+    math.className = "neuron-math";
+
     const table = document.createElement("table");
     table.className = "contributions";
     table.innerHTML =
-      "<caption>z = Σ wᵢ aᵢ + b</caption>" +
-      "<thead><tr><th>term</th><th>w</th><th>a</th><th>w·a</th></tr></thead>";
+      "<thead><tr><th>term</th><th>wᵢ</th><th>aᵢ</th><th>wᵢ·aᵢ</th></tr></thead>";
     const body = document.createElement("tbody");
+    // One row per input only: the bias is not a term of the sum over i, and
+    // the line under the table is where it enters.
     weights.forEach((w, i) => {
       const tr = document.createElement("tr");
       tr.innerHTML =
-        `<td>input ${i}</td><td>${format(w)}</td>` +
+        `<td>i=${i}</td><td>${format(w)}</td>` +
         `<td>${format(inputs[i])}</td><td>${format(w * inputs[i])}</td>`;
       body.append(tr);
     });
-    const biasRow = document.createElement("tr");
-    biasRow.innerHTML = `<td>bias</td><td>—</td><td>—</td><td>${format(bias)}</td>`;
-    body.append(biasRow);
     table.append(body);
-    section.append(table);
+    math.append(table);
 
-    section.append(row("preactivation z", format(z)));
-    if (isOutput) {
-      section.append(
-        row("activation a", format(a), "the output layer applies no nonlinearity"),
-      );
-    } else {
-      const slope = activationDerivative(activation, z);
-      section.append(row(`a = ${activation}(z)`, format(a)));
-      const atKink = activation === "relu" && z === 0;
-      section.append(
-        row(
-          "φ′(z)",
-          format(slope),
-          atKink
-            ? "exactly at the ReLU kink: no derivative exists here, and 0 is a convention"
-            : activation === "relu" && z < 0
-              ? "this unit is off, so it blocks changes from upstream"
-              : undefined,
-        ),
-      );
-    }
-    return section;
-  }
-
-  function parameterSection(snapshot: Snapshot, ref: ParameterRef): HTMLElement {
-    const section = document.createElement("section");
-    section.className = "panel";
-    const value = readParameter(snapshot.parameters, ref);
-
-    const heading = document.createElement("h3");
-    heading.textContent = `Parameter: ${describeParameter(ref)}`;
-    section.append(heading);
-
-    const controls = document.createElement("div");
-    controls.className = "editor";
-
-    const number = document.createElement("input");
-    number.type = "number";
-    number.step = "0.01";
-    number.value = String(value);
-    number.className = "value-input";
-    number.setAttribute("aria-label", `value of ${describeParameter(ref)}`);
-
-    const commit = (raw: string) => {
-      const next = Number(raw);
-      if (!Number.isFinite(next)) {
-        number.setCustomValidity("must be a finite number");
-        number.reportValidity();
-        return;
-      }
-      number.setCustomValidity("");
-      onEdit(ref, next);
-    };
-    // The slider lives under the parameters-to-output plot, on that plot's
-    // own axis; this field is for a value typed exactly, or one past the
-    // ends of that axis.
-    number.addEventListener("change", () => commit(number.value));
-
-    const restore = document.createElement("button");
-    restore.type = "button";
-    restore.textContent = "Restore this parameter";
-    restore.addEventListener("click", () => onRestore(ref));
-
-    controls.append(number, restore);
-    section.append(controls);
-
-    const gradient = snapshot.pointGradient;
-    if (gradient) {
-      const slope =
-        ref.kind === "weight"
-          ? gradient[ref.layer].W[ref.out][ref.in]
-          : gradient[ref.layer].b[ref.out];
-      section.append(row("∂ℓ/∂θ (this example)", format(slope)));
-    }
-    const trainSlope =
-      ref.kind === "weight"
-        ? snapshot.train.gradient[ref.layer].W[ref.out][ref.in]
-        : snapshot.train.gradient[ref.layer].b[ref.out];
-    section.append(
-      row("∂L/∂θ (mean loss, train split)", format(trainSlope),
-        "the slope of the mean loss itself, not an average of per-example magnitudes"),
+    // What the table adds up to, and what the nonlinearity then does with
+    // it: the two steps the plot below draws, written out.
+    math.append(
+      formula("Preactivation z = Σ wᵢ aᵢ + bias = ", z),
+      formula(`Activation a = ${activationName(phi)}(z) = `, a),
     );
+    if (isOutput) {
+      math.append(note("the output layer applies no nonlinearity"));
+    } else {
+      // The slope stays because this is the only place the ReLU convention
+      // is disclosed: PLAN.md section 4 requires saying that no derivative
+      // exists at the kink, and a dead unit is worth naming where it shows.
+      const slope = activationDerivative(activation, z);
+      math.append(formula("Slope φ′(z) = ", slope));
+      if (activation === "relu" && z === 0) {
+        math.append(
+          note("exactly at the ReLU kink: no derivative exists here, and 0 is a convention"),
+        );
+      } else if (activation === "relu" && z < 0) {
+        math.append(note("this unit is off, so it blocks changes from upstream"));
+      }
+    }
+
+    layout.append(math, activationPlot(phi, z, a));
+    section.append(layout);
     return section;
   }
 
@@ -174,8 +194,12 @@ export function createInspector(options: InspectorOptions): Inspector {
     heading.textContent = "Prediction and loss";
     section.append(heading);
 
-    section.append(row("prediction ŷ", format(snapshot.trace.output)));
-    section.append(
+    // One grid for the lot, each column as wide as its own widest entry:
+    // the values line up without being pushed to the far side of the panel.
+    const readouts = document.createElement("div");
+    readouts.className = "readouts";
+    readouts.append(
+      row("prediction ŷ", format(snapshot.trace.output)),
       row(
         "target y",
         snapshot.target === null ? "—" : format(snapshot.target),
@@ -183,17 +207,16 @@ export function createInspector(options: InspectorOptions): Inspector {
           ? "this point has no defined target, so it has no loss"
           : undefined,
       ),
-    );
-    section.append(row("point loss ℓ", format(snapshot.pointLoss)));
-    section.append(
+      row("point loss ℓ", format(snapshot.pointLoss)),
       row(
         "∂ŷ/∂x",
         snapshot.inputSensitivity.map(format).join(",  "),
         `with respect to ${options.inputNames.join(" and ")}`,
       ),
+      row("mean loss L (train)", format(snapshot.train.meanLoss)),
+      row("mean loss L (held out)", format(snapshot.test.meanLoss)),
     );
-    section.append(row("mean loss L (train)", format(snapshot.train.meanLoss)));
-    section.append(row("mean loss L (held out)", format(snapshot.test.meanLoss)));
+    section.append(readouts);
 
     if (edit) {
       // The comparison the whole explorer is built around, evaluated
@@ -213,7 +236,7 @@ export function createInspector(options: InspectorOptions): Inspector {
           : snapshot.pointLoss - previous.pointLoss;
 
       const comparison = document.createElement("div");
-      comparison.className = "comparison";
+      comparison.className = "comparison readouts";
       comparison.append(
         row("Δθ", format(delta)),
         row("predicted Δℓ ≈ (∂ℓ/∂θ)Δθ", format(predicted)),
@@ -229,44 +252,57 @@ export function createInspector(options: InspectorOptions): Inspector {
   }
 
   return {
-    render(snapshot, edit, ripple) {
-      const children: HTMLElement[] = [predictionSection(snapshot, edit)];
-      if (snapshot.selection) {
-        children.push(parameterSection(snapshot, snapshot.selection));
-        children.push(neuronSection(snapshot, snapshot.selection));
-      } else {
-        const hint = document.createElement("section");
-        hint.className = "panel";
-        hint.innerHTML =
-          "<h3>Nothing selected</h3><p>Select an edge to edit its weight, " +
-          "or a node to edit its bias.</p>";
-        children.push(hint);
-      }
-      if (ripple) {
-        const section = document.createElement("section");
-        section.className = "panel";
-        section.innerHTML = "<h3>Downstream effect</h3>";
-        section.append(row("reach", describeRipple(ripple)));
-        const list = document.createElement("table");
-        list.className = "contributions";
-        list.innerHTML =
-          "<thead><tr><th>node</th><th>before</th><th>after</th><th>Δ</th></tr></thead>";
-        const body = document.createElement("tbody");
-        for (const stage of ripple.stages) {
-          for (const node of stage.nodes) {
-            const tr = document.createElement("tr");
-            tr.className = node.changed ? "" : "is-blocked";
-            tr.innerHTML =
-              `<td>L${node.layer}·${node.index}</td><td>${format(node.before)}</td>` +
-              `<td>${format(node.after)}</td><td>${node.changed ? format(node.delta) : "unchanged"}</td>`;
-            body.append(tr);
-          }
-        }
-        list.append(body);
-        section.append(list);
-        children.push(section);
-      }
-      container.replaceChildren(...children);
+    render(snapshot, edit) {
+      // Something is always selected, so there is no empty branch here.
+      container.replaceChildren(
+        predictionSection(snapshot, edit),
+        neuronSection(snapshot, snapshot.selection),
+      );
     },
   };
+}
+
+/** One line of the neuron's arithmetic: the expression, then its value. */
+function formula(text: string, value: number): HTMLElement {
+  const element = document.createElement("p");
+  element.className = "formula";
+  element.append(text);
+  const number = document.createElement("span");
+  number.className = "formula-value";
+  number.textContent = format(value);
+  element.append(number);
+  return element;
+}
+
+/** A caveat under a line of arithmetic, in the hints' own quieter voice. */
+function note(text: string): HTMLElement {
+  const element = document.createElement("p");
+  element.className = "formula-note";
+  element.textContent = text;
+  return element;
+}
+
+/** The activation's name as it is written in the mathematics. */
+function activationName(name: Activation): string {
+  return name === "relu" ? "ReLU" : name;
+}
+
+function line(x1: number, y1: number, x2: number, y2: number, className: string): SVGElement {
+  const node = document.createElementNS(SVG, "line");
+  node.setAttribute("x1", x1.toFixed(2));
+  node.setAttribute("y1", y1.toFixed(2));
+  node.setAttribute("x2", x2.toFixed(2));
+  node.setAttribute("y2", y2.toFixed(2));
+  node.setAttribute("class", className);
+  return node;
+}
+
+function tick(text: string, x: number, y: number, anchor: string): SVGElement {
+  const node = document.createElementNS(SVG, "text");
+  node.setAttribute("x", x.toFixed(2));
+  node.setAttribute("y", y.toFixed(2));
+  node.setAttribute("text-anchor", anchor);
+  node.setAttribute("class", "slice-tick");
+  node.textContent = text;
+  return node;
 }

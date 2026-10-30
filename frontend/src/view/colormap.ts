@@ -75,6 +75,10 @@ export interface ColorScale {
 /**
  * The smallest round number that covers every value given, so the limit (and
  * therefore every colour) only moves when the data really outgrows it.
+ *
+ * The result is printed as an axis tick, so it is snapped back to the
+ * ladder's own precision: `3 * 0.1` is 0.30000000000000004 in binary, and a
+ * "round number" that reads like that on an axis is not one.
  */
 export function niceLimit(...groups: Iterable<number>[]): number {
   let largest = 0;
@@ -90,9 +94,14 @@ export function niceLimit(...groups: Iterable<number>[]): number {
   for (const step of LADDER) {
     // The slack absorbs the rounding in the decade itself, so a value that
     // is exactly a ladder stop does not push the limit up a notch.
-    if (step * decade >= largest * (1 - 1e-12)) return step * decade;
+    if (step * decade >= largest * (1 - 1e-12)) return round(step * decade);
   }
-  return 10 * decade;
+  return round(10 * decade);
+}
+
+/** Back to the few significant digits a ladder stop actually has. */
+function round(value: number): number {
+  return Number(value.toPrecision(12));
 }
 
 export function createColorScale(

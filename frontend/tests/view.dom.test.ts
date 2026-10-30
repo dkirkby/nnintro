@@ -4,22 +4,37 @@
  * The view half of the Stage 0 exit condition: an edit preserves the
  * selection in the rendered SVG, the three colour families stay apart, and
  * the three plots of the input-to-output panel share their axes exactly.
+ *
+ * Selection is per *unit*: a click on a node or on any edge into it selects
+ * that neuron and every weight feeding it, and the parameters-to-output
+ * panel shows exactly those parameters, one slider each.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parameterCurves } from "../src/model/curves.js";
 import { outputSlice, outputSurface } from "../src/model/surface.js";
 import { createExplorer, type Explorer } from "../src/state.js";
-import type { ParameterRef } from "../src/model/types.js";
-import { edgeParameter } from "../src/view/adapter.js";
+import {
+  describeParameter,
+  unitOf,
+  unitParameters,
+  type ParameterRef,
+  type UnitRef,
+} from "../src/model/types.js";
+import { edgeParameter, edgeUnit, nodeUnit } from "../src/view/adapter.js";
 import { createColorScale, niceLimit, type Palette } from "../src/view/colormap.js";
 import { createInputOutputView, type InputOutputView } from "../src/view/inputoutput.js";
+import { createHelp, type Help } from "../src/view/help.js";
+import { createInspector, type Inspector } from "../src/view/inspector.js";
 import { createNetworkView, format, type NetworkView } from "../src/view/network.js";
 import { createParamSpaceView, type ParamSpaceView } from "../src/view/paramspace.js";
+import { createTensorsView, type TensorsView } from "../src/view/tensors.js";
 import { loadCheckpoint, loadManifest } from "./fixtures.js";
 
 const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
 const WEIGHT: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
+/** Hidden unit 1: what a click on that weight's edge now selects. */
+const WEIGHT_UNIT: UnitRef = unitOf(WEIGHT);
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 const SURFACE = outputSurface(CHECKPOINT.parameters, ACTIVATION, CHECKPOINT.dataset.domain, 12);
 const PALETTE: Palette = {
@@ -40,7 +55,7 @@ describe("the network view", () => {
   let container: HTMLElement;
   let explorer: Explorer;
   let view: NetworkView;
-  let selected: ParameterRef | null = null;
+  let selected: UnitRef | null = null;
 
   beforeEach(() => {
     container = document.createElement("div");
@@ -51,9 +66,9 @@ describe("the network view", () => {
       container,
       layerSizes: CHECKPOINT.architecture.layerSizes,
       idPrefix: "test",
-      onSelect: (ref) => {
-        selected = ref;
-        explorer.selectParameter(ref);
+      onSelect: (unit) => {
+        selected = unit;
+        if (unit) explorer.selectUnit(unit);
       },
     });
     view.render(explorer.snapshot(), "weights", PALETTE);
@@ -78,17 +93,19 @@ describe("the network view", () => {
     expect(edge.classList).toContain("is-faint");
 
     // And the wide transparent twin carries the same key, so a click on it
-    // selects the weight even where the line itself is a hairline.
+    // selects the unit even where the line itself is a hairline.
     const target = container.querySelector('.edge-target[data-key="e:0:0:1"]')!;
     target.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    expect(selected).toEqual(WEIGHT);
+    expect(selected).toEqual(WEIGHT_UNIT);
   });
 
-  it("RAILS A SELECTED EDGE IN BLACK on either side, leaving it its colour", () => {
-    explorer.selectParameter(WEIGHT);
+  it("RAILS EVERY EDGE INTO THE SELECTED UNIT, leaving each its colour", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
     view.render(explorer.snapshot(), "weights", PALETTE);
+    // One unit, every edge feeding it: two rails each.
+    const feeding = CHECKPOINT.architecture.layerSizes[0];
     const rails = Array.from(container.querySelectorAll<SVGLineElement>(".edge-outline"));
-    expect(rails).toHaveLength(2);
+    expect(rails).toHaveLength(2 * feeding);
 
     const edge = container.querySelector<SVGLineElement>('.dn-edge[data-key="e:0:0:1"]')!;
     const at = (node: SVGLineElement) => ({
@@ -98,7 +115,10 @@ describe("the network view", () => {
       dy: Number(node.getAttribute("y2")) - Number(node.getAttribute("y1")),
     });
     const line = at(edge);
-    const [one, two] = rails.map(at);
+    // This edge's own two rails, picked out of the unit's set by direction.
+    const [one, two] = rails
+      .map(at)
+      .filter((rail) => Math.abs(rail.dx - line.dx) < 0.05 && Math.abs(rail.dy - line.dy) < 0.05);
     // Parallel to the edge, and offset to opposite sides of it by the same
     // distance, so the edge itself is untouched between them.
     // Coordinates are written to two decimals of SVG user units.
@@ -112,43 +132,111 @@ describe("the network view", () => {
     // The edge keeps the colour the scale gave it.
     expect(edge.getAttribute("stroke")).toContain("var(--param-");
 
-    // A node wears the outline itself, and only one thing is ever selected.
-    explorer.selectParameter({ kind: "bias", layer: 0, out: 2 });
+    // The unit's own node wears the outline itself, and it is the only
+    // selected node: a sibling unit's edges and node are untouched.
+    expect(container.querySelectorAll(".dn-node.is-selected")).toHaveLength(1);
+    expect(container.querySelector('[data-key="n:1:1"]')!.classList).toContain(
+      "is-selected",
+    );
+    expect(container.querySelector('[data-key="n:1:2"]')!.classList).not.toContain(
+      "is-selected",
+    );
+    expect(container.querySelector('[data-key="e:0:0:2"]')!.classList).not.toContain(
+      "is-selected",
+    );
+  });
+
+  it("SELECTS A NODE'S WHOLE UNIT: the node and every edge feeding it", () => {
+    const node = container.querySelector<SVGElement>('[data-key="n:1:2"]')!;
+    node.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(selected).toEqual({ layer: 0, out: 2 });
+
     view.render(explorer.snapshot(), "weights", PALETTE);
-    expect(container.querySelectorAll(".edge-outline")).toHaveLength(0);
+    expect(container.querySelector('[data-key="n:1:2"]')!.classList).toContain(
+      "is-selected",
+    );
+    const inputs = CHECKPOINT.architecture.layerSizes[0];
+    for (let source = 0; source < inputs; source += 1) {
+      expect(
+        container.querySelector(`.dn-edge[data-key="e:0:${source}:2"]`)!.classList,
+      ).toContain("is-selected");
+    }
+    // Nothing else: one node and its own incoming edges.
+    expect(container.querySelectorAll(".dn-edge.is-selected")).toHaveLength(inputs);
     expect(container.querySelectorAll(".dn-node.is-selected")).toHaveLength(1);
   });
 
-  it("clicking an edge selects the weight that edge represents", () => {
+  it("an edge selects the unit it FEEDS, with its siblings into that unit", () => {
+    // e:0:0:1 is input 0 -> hidden unit 1, so the selection is hidden unit
+    // 1: the edge from input 1 into the same unit comes with it, and the
+    // edge from input 0 into a different unit does not.
+    const element = container.querySelector<SVGElement>('[data-key="e:0:0:1"]')!;
+    element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(selected).toEqual(edgeUnit({ sourceLayerIndex: 0, targetNodeIndex: 1 }));
+
+    view.render(explorer.snapshot(), "weights", PALETTE);
+    expect(container.querySelector('.dn-edge[data-key="e:0:1:1"]')!.classList).toContain(
+      "is-selected",
+    );
+    expect(
+      container.querySelector('.dn-edge[data-key="e:0:0:2"]')!.classList,
+    ).not.toContain("is-selected");
+  });
+
+  it("opens on the output unit and its final-layer edges", () => {
+    const last = CHECKPOINT.architecture.layerSizes.length - 1;
+    const width = CHECKPOINT.architecture.layerSizes[last - 1];
+    expect(explorer.snapshot().selection).toEqual(
+      nodeUnit({ layerIndex: last, nodeIndex: 0 }),
+    );
+    expect(container.querySelector(`[data-key="n:${last}:0"]`)!.classList).toContain(
+      "is-selected",
+    );
+    expect(container.querySelectorAll(".dn-edge.is-selected")).toHaveLength(width);
+    for (let source = 0; source < width; source += 1) {
+      expect(
+        container.querySelector(`.dn-edge[data-key="e:${last - 1}:${source}:0"]`)!
+          .classList,
+      ).toContain("is-selected");
+    }
+  });
+
+  it("still reads an edge destination-first on the way to its unit", () => {
     const element = container.querySelector<SVGElement>('[data-key="e:0:0:1"]');
     expect(element).not.toBeNull();
     element!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    // source 0 -> target 1 is W[1][0], destination-first.
-    expect(selected).toEqual({ kind: "weight", layer: 0, out: 1, in: 0 });
-    expect(selected).toEqual(edgeParameter({
-      sourceLayerIndex: 0,
-      sourceNodeIndex: 0,
-      targetNodeIndex: 1,
-    }));
+    // source 0 -> target 1 is W[1][0], destination-first, and that weight's
+    // unit is the one selected.
+    expect(selected).toEqual(
+      unitOf(
+        edgeParameter({ sourceLayerIndex: 0, sourceNodeIndex: 0, targetNodeIndex: 1 }),
+      ),
+    );
+    expect(selected).toEqual({ layer: 0, out: 1 });
   });
 
-  it("keyboard activation selects the same parameter as a click", () => {
+  it("keyboard activation selects the same unit as a click", () => {
     const element = container.querySelector<SVGElement>('[data-key="n:1:2"]');
     element!.dispatchEvent(
       new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
     );
-    expect(selected).toEqual({ kind: "bias", layer: 0, out: 2 });
+    expect(selected).toEqual({ layer: 0, out: 2 });
   });
 
-  it("the input layer's nodes are not selectable, having no bias", () => {
+  it("the input layer's nodes own nothing, so selecting one selects nothing", () => {
+    // The one click that changes nothing: there is no way to deselect, so
+    // the unit that was selected stays selected.
+    const before = explorer.snapshot().selection;
     const element = container.querySelector<SVGElement>('[data-key="n:0:0"]');
     element!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     expect(selected).toBeNull();
+    expect(explorer.snapshot().selection).toEqual(before);
   });
 
   it("KEEPS THE SELECTION VISIBLE after an edit re-renders the view", () => {
-    explorer.selectParameter(WEIGHT);
+    explorer.selectUnit(WEIGHT_UNIT);
     view.render(explorer.snapshot(), "weights", PALETTE);
+    const inputs = CHECKPOINT.architecture.layerSizes[0];
     expect(container.querySelector('[data-key="e:0:0:1"]')!.classList).toContain(
       "is-selected",
     );
@@ -157,7 +245,9 @@ describe("the network view", () => {
     view.render(explorer.snapshot(), "weights", PALETTE);
     const stillSelected = container.querySelector('[data-key="e:0:0:1"]');
     expect(stillSelected!.classList).toContain("is-selected");
-    expect(container.querySelectorAll(".is-selected")).toHaveLength(1);
+    // The whole unit, and only it: its node plus one edge per input.
+    expect(container.querySelectorAll(".dn-edge.is-selected")).toHaveLength(inputs);
+    expect(container.querySelectorAll(".dn-node.is-selected")).toHaveLength(1);
   });
 
   it("shows the edited value, not the checkpoint's", () => {
@@ -221,6 +311,21 @@ describe("the input \u2192 output panel", () => {
     expect(container.querySelectorAll(".io-slice-x2 .crosshair")).toHaveLength(1);
     expect(container.querySelector(".probe")).toBeNull();
     expect(container.querySelector(".sensitivity-arrow")).toBeNull();
+  });
+
+  it("DRAWS THE TWO INPUT AXES through the origin, under everything else", () => {
+    view.render(explorer.snapshot(), frame(true));
+    const axes = Array.from(container.querySelectorAll<SVGElement>(".io-marks .map-axis"));
+    expect(axes).toHaveLength(2);
+    const vertical = axes.find((node) => node.getAttribute("x1") === node.getAttribute("x2"))!;
+    const horizontal = axes.find((node) => node.getAttribute("y1") === node.getAttribute("y2"))!;
+    expect(Number(vertical.getAttribute("x1"))).toBeCloseTo(toPixelX(0), 2);
+    expect(Number(horizontal.getAttribute("y1"))).toBeCloseTo(toPixelY(0), 2);
+
+    // First in document order: a reference line is drawn under the samples
+    // and the crosshairs, never over them.
+    const marks = Array.from(container.querySelector(".io-marks")!.children);
+    expect(marks.slice(0, 2)).toEqual(axes);
   });
 
   it("LINES THE SLICES UP WITH THE MAP's OWN AXES", () => {
@@ -363,8 +468,7 @@ describe("the parameters → output panel", () => {
   let view: ParamSpaceView;
   let edited: [ParameterRef, number] | null = null;
 
-  const WEIGHT_REF: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
-
+  /** Exactly what `main.ts` hands the panel: the selected unit's sweeps. */
   function frame() {
     const snapshot = explorer.snapshot();
     const curves = parameterCurves(
@@ -372,12 +476,16 @@ describe("the parameters → output panel", () => {
       ACTIVATION,
       snapshot.x,
       PALETTE.param.limit,
+      unitParameters(snapshot.parameters, snapshot.selection),
     );
     return {
       curves,
       paramScale: PALETTE.param,
       outputScale: PALETTE.output,
-      outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
+      // The same 5% headroom `main.ts` gives the axis.
+      outputLimit: niceLimit(
+        curves.flatMap((curve) => curve.outputs.map((value) => value * 1.05)),
+      ),
     };
   }
 
@@ -396,16 +504,21 @@ describe("the parameters → output panel", () => {
     });
   });
 
-  it("draws one curve and one dot per parameter", () => {
+  it("DRAWS ONLY THE SELECTED UNIT's PARAMETERS, one curve and dot each", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
     const current = frame();
     view.render(explorer.snapshot(), current);
-    const count = CHECKPOINT.parameters.reduce(
-      (total, layer) => total + layer.W.flat().length + layer.b.length,
-      0,
-    );
+    // Hidden unit 1: its bias plus one weight per input, and nothing from
+    // any other unit.
+    const count = 1 + CHECKPOINT.architecture.layerSizes[0];
     expect(current.curves).toHaveLength(count);
     expect(container.querySelectorAll(".param-curve")).toHaveLength(count);
     expect(container.querySelectorAll(".param-dot")).toHaveLength(count);
+    expect(
+      Array.from(container.querySelectorAll(".param-curve")).map((node) =>
+        node.getAttribute("data-param"),
+      ),
+    ).toEqual(["b[0][1]", "W[0][1][0]", "W[0][1][1]"]);
   });
 
   it("PUTS EVERY DOT ON THE OUTPUT LINE, which is the panel's whole claim", () => {
@@ -416,48 +529,95 @@ describe("the parameters → output panel", () => {
     }
   });
 
-  it("highlights the selected parameter's curve and nothing else", () => {
+  it("LISTS ONE SLIDER PER PARAMETER, the bias first then the weights", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
     view.render(explorer.snapshot(), frame());
-    expect(container.querySelectorAll(".param-curve.is-selected")).toHaveLength(0);
+    const sliders = Array.from(
+      container.querySelectorAll<HTMLInputElement>(".param-slider"),
+    );
+    // Bias at the top, then each weight in the order its edge appears from
+    // top to bottom in the network diagram (ascending source index).
+    expect(sliders.map((slider) => slider.dataset.param)).toEqual([
+      "b[0][1]",
+      "W[0][1][0]",
+      "W[0][1][1]",
+    ]);
+    expect(
+      Array.from(container.querySelectorAll(".param-row-name")).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["b", "w\u2080", "w\u2081"]);
 
-    explorer.selectParameter(WEIGHT_REF);
-    view.render(explorer.snapshot(), frame());
-    expect(container.querySelectorAll(".param-curve.is-selected")).toHaveLength(1);
-    expect(container.querySelectorAll(".param-dot.is-selected")).toHaveLength(1);
+    // Every slider is on the colour bar's own axis, and none is disabled:
+    // there is no empty selection to disable them for.
+    for (const slider of sliders) {
+      expect(slider.disabled).toBe(false);
+      expect(Number(slider.min)).toBeCloseTo(-PALETTE.param.limit, 12);
+      expect(Number(slider.max)).toBeCloseTo(PALETTE.param.limit, 12);
+    }
+    expect(Number(sliders[0].value)).toBeCloseTo(CHECKPOINT.parameters[0].b[1], 6);
+    expect(Number(sliders[1].value)).toBeCloseTo(CHECKPOINT.parameters[0].W[1][0], 6);
   });
 
-  it("puts the slider on the same axis as the plot, disabled until something is selected", () => {
+  it("names each curve at its dot, so the sliders and the lines match up", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
     view.render(explorer.snapshot(), frame());
-    const slider = container.querySelector<HTMLInputElement>(".param-slider")!;
-    expect(slider.disabled).toBe(true);
-    expect(Number(slider.min)).toBeCloseTo(-PALETTE.param.limit, 12);
-    expect(Number(slider.max)).toBeCloseTo(PALETTE.param.limit, 12);
+    expect(
+      Array.from(container.querySelectorAll(".param-symbol")).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(["b", "w\u2080", "w\u2081"]);
+  });
 
-    explorer.selectParameter(WEIGHT_REF);
+  it("REBUILDS THE ROWS when the selection moves to another unit", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
     view.render(explorer.snapshot(), frame());
-    expect(slider.disabled).toBe(false);
-    expect(Number(slider.value)).toBeCloseTo(
-      CHECKPOINT.parameters[0].W[1][0],
-      6,
+    const output = { layer: CHECKPOINT.parameters.length - 1, out: 0 };
+    explorer.selectUnit(output);
+    view.render(explorer.snapshot(), frame());
+    expect(
+      Array.from(container.querySelectorAll<HTMLInputElement>(".param-slider")).map(
+        (slider) => slider.dataset.param,
+      ),
+    ).toEqual(
+      unitParameters(explorer.snapshot().parameters, output).map(describeParameter),
     );
   });
 
-  it("EDITS THE SELECTED PARAMETER as the slider is dragged", () => {
-    explorer.selectParameter(WEIGHT_REF);
+  it("EDITS THE PARAMETER WHOSE SLIDER WAS DRAGGED, not some other one", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
     view.render(explorer.snapshot(), frame());
-    const slider = container.querySelector<HTMLInputElement>(".param-slider")!;
-    slider.value = "0.25";
-    slider.dispatchEvent(new window.Event("input", { bubbles: true }));
-    expect(edited).toEqual([WEIGHT_REF, 0.25]);
-    expect(explorer.snapshot().parameters[0].W[1][0]).toBe(0.25);
+    // The third row is W[0][1][1], so a drag there must not move W[0][1][0].
+    const sliders = Array.from(
+      container.querySelectorAll<HTMLInputElement>(".param-slider"),
+    );
+    const untouched = CHECKPOINT.parameters[0].W[1][0];
+    sliders[2].value = "0.25";
+    sliders[2].dispatchEvent(new window.Event("input", { bubbles: true }));
+    expect(edited).toEqual([{ kind: "weight", layer: 0, out: 1, in: 1 }, 0.25]);
+    expect(explorer.snapshot().parameters[0].W[1][1]).toBe(0.25);
+    expect(explorer.snapshot().parameters[0].W[1][0]).toBe(untouched);
 
-    // And the redrawn plot follows the new state: the dots are still on the
-    // line, which has moved with the output.
+    // And the row for the parameter that was edited follows the new state.
     view.render(explorer.snapshot(), frame());
+    expect(Number(sliders[2].value)).toBeCloseTo(0.25, 6);
+
+    // The redrawn plot follows too: the dots are still on the line, which
+    // has moved with the output.
     const level = Number(container.querySelector(".output-level")!.getAttribute("y1"));
     for (const dot of Array.from(container.querySelectorAll(".param-dot"))) {
       expect(Number(dot.getAttribute("cy"))).toBeCloseTo(level, 2);
     }
+  });
+
+  it("edits the bias from the top row", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    view.render(explorer.snapshot(), frame());
+    const slider = container.querySelector<HTMLInputElement>(".param-slider")!;
+    slider.value = "-0.5";
+    slider.dispatchEvent(new window.Event("input", { bubbles: true }));
+    expect(edited).toEqual([{ kind: "bias", layer: 0, out: 1 }, -0.5]);
+    expect(explorer.snapshot().parameters[0].b[1]).toBe(-0.5);
   });
 
   it("carries the parameter scale on its x axis and the output scale up its back", () => {
@@ -475,5 +635,335 @@ describe("the parameters → output panel", () => {
     expect(plot.style.backgroundImage).toContain(
       PALETTE.output.css(current.outputLimit),
     );
+  });
+});
+
+describe("the inspector", () => {
+  let container: HTMLElement;
+  let explorer: Explorer;
+  let inspector: Inspector;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.replaceChildren(container);
+    explorer = createExplorer(CHECKPOINT);
+    explorer.setProbe({ kind: "free", x: [0.649, -0.64] });
+    inspector = createInspector({
+      container,
+      activation: ACTIVATION,
+      targetName: CHECKPOINT.dataset.targetName,
+      inputNames: CHECKPOINT.dataset.inputNames,
+    });
+  });
+
+  /** The activation plot's polyline, as (x, y) pairs in its own user units. */
+  function curve(): [number, number][] {
+    const points = container
+      .querySelector<SVGElement>(".phi-plot .phi-curve")!
+      .getAttribute("points")!;
+    return points.split(" ").map((pair) => {
+      const [x, y] = pair.split(",").map(Number);
+      return [x, y] as [number, number];
+    });
+  }
+
+  function dot(): { x: number; y: number } {
+    const circle = container.querySelector<SVGElement>(".phi-plot .phi-dot")!;
+    return { x: Number(circle.getAttribute("cx")), y: Number(circle.getAttribute("cy")) };
+  }
+
+  /**
+   * The drawn curve's height at an x, between the samples either side.
+   * Coordinates are written to two decimals, so comparisons against this
+   * carry a tolerance of a hundredth of a user unit rather than being exact.
+   */
+  function curveAt(x: number): number {
+    const points = curve();
+    const index = points.findIndex(([px]) => px >= x);
+    if (index <= 0) return points[Math.max(index, 0)][1];
+    const [x0, y0] = points[index - 1];
+    const [x1, y1] = points[index];
+    return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+  }
+
+  /** The second panel the inspector renders: "Neuron: …". */
+  function neuron(): HTMLElement {
+    return container.querySelectorAll<HTMLElement>("section.panel")[1];
+  }
+
+  it("TABULATES ONE ROW PER INPUT TERM, and no bias row", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    inspector.render(explorer.snapshot(), null);
+    const heads = Array.from(neuron().querySelectorAll("thead th"));
+    expect(heads.map((head) => head.textContent)).toEqual([
+      "term",
+      "w\u1d62",
+      "a\u1d62",
+      "w\u1d62\u00b7a\u1d62",
+    ]);
+    const rows = Array.from(neuron().querySelectorAll("tbody tr"));
+    // The bias is not a term of the sum over i; it enters in the line below.
+    expect(rows.map((row) => row.children[0].textContent)).toEqual(
+      CHECKPOINT.parameters[0].W[WEIGHT_UNIT.out].map((_, i) => `i=${i}`),
+    );
+  });
+
+  it("WRITES OUT THE TWO STEPS under the table, with their values", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    const snapshot = explorer.snapshot();
+    inspector.render(snapshot, null);
+    const lines = Array.from(neuron().querySelectorAll(".formula")).map(
+      (line) => line.textContent,
+    );
+    expect(lines[0]).toBe(
+      `Preactivation z = \u03a3 w\u1d62 a\u1d62 + bias = ` +
+        `${format(snapshot.trace.pre[1][WEIGHT_UNIT.out])}`,
+    );
+    expect(lines[1]).toBe(
+      `Activation a = ReLU(z) = ${format(snapshot.trace.act[1][WEIGHT_UNIT.out])}`,
+    );
+  });
+
+  it("ENDS WITH THE PLOT, beside the arithmetic and with nothing after it", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    inspector.render(explorer.snapshot(), null);
+    // The plot is the second half of the neuron panel's two-column body,
+    // which is itself the last thing in the panel.
+    const body = neuron().lastElementChild!;
+    expect(body.classList.contains("neuron-body")).toBe(true);
+    expect(body.children).toHaveLength(2);
+    expect(body.children[0].classList.contains("neuron-math")).toBe(true);
+    expect(body.lastElementChild!.classList.contains("phi-plot")).toBe(true);
+  });
+
+  it("names the output unit's activation as the identity it is", () => {
+    explorer.selectUnit({ layer: CHECKPOINT.parameters.length - 1, out: 0 });
+    inspector.render(explorer.snapshot(), null);
+    const lines = Array.from(neuron().querySelectorAll(".formula")).map(
+      (line) => line.textContent,
+    );
+    expect(lines[1]).toContain("Activation a = identity(z) = ");
+    // No slope line: the identity has nothing to disclose.
+    expect(lines).toHaveLength(2);
+    expect(neuron().textContent).toContain("the output layer applies no nonlinearity");
+  });
+
+  it("PLOTS THE ACTIVATION FUNCTION WITH THE UNIT's OWN (z, a) ON IT", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    inspector.render(explorer.snapshot(), null);
+    const plot = container.querySelector<SVGElement>(".phi-plot")!;
+    expect(plot.dataset.activation).toBe(ACTIVATION);
+
+    // The panel's one structural claim: the dot is a point *of* the drawn
+    // function, not a mark placed near it. Both activations are piecewise
+    // linear or sampled finely enough for the straight segments to hold.
+    const here = dot();
+    expect(here.y).toBeCloseTo(curveAt(here.x), 1);
+    // And inside the frame, never on it: the axis carries headroom so an
+    // edit cannot push the dot out of view.
+    const [first] = curve();
+    const last = curve().at(-1)!;
+    expect(here.x).toBeGreaterThan(first[0]);
+    expect(here.x).toBeLessThan(last[0]);
+  });
+
+  it("MOVES THE DOT ALONG THE CURVE when the bias changes", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    inspector.render(explorer.snapshot(), null);
+    const before = dot();
+
+    const bias = explorer.snapshot().parameters[0].b[WEIGHT_UNIT.out];
+    explorer.setParameter({ kind: "bias", layer: 0, out: WEIGHT_UNIT.out }, bias + 0.4);
+    inspector.render(explorer.snapshot(), explorer.lastEdit());
+    const after = dot();
+
+    // A larger bias is a larger z, so the dot slides to the right — and it
+    // is still a point of the function, which the bias does not change.
+    expect(after.x).toBeGreaterThan(before.x);
+    expect(after.y).toBeCloseTo(curveAt(after.x), 1);
+  });
+
+  it("draws the output unit's identity, since that layer has no nonlinearity", () => {
+    const output: UnitRef = { layer: CHECKPOINT.parameters.length - 1, out: 0 };
+    explorer.selectUnit(output);
+    inspector.render(explorer.snapshot(), null);
+    expect(container.querySelector<SVGElement>(".phi-plot")!.dataset.activation).toBe(
+      "identity",
+    );
+    // a = z over the whole range: one straight line, corner to corner of a
+    // square frame on one scale.
+    const points = curve();
+    const [x0, y0] = points[0];
+    const [x1, y1] = points.at(-1)!;
+    expect(y0 - y1).toBeCloseTo(x1 - x0, 1);
+    for (const [x, y] of points) {
+      expect(y).toBeCloseTo(y0 + ((x - x0) / (x1 - x0)) * (y1 - y0), 1);
+    }
+  });
+
+  it("has no empty state, since the selection is never empty", () => {
+    inspector.render(explorer.snapshot(), null);
+    expect(container.textContent).not.toContain("Nothing selected");
+    expect(container.textContent).toContain("Neuron:");
+    expect(container.querySelector(".phi-plot")).not.toBeNull();
+  });
+
+  it("no longer carries the parameter table or the downstream-effect table", () => {
+    explorer.selectUnit(WEIGHT_UNIT);
+    explorer.setParameter(WEIGHT, 1.75);
+    inspector.render(explorer.snapshot(), explorer.lastEdit());
+    expect(container.querySelector(".param-table")).toBeNull();
+    expect(container.textContent).not.toContain("Downstream effect");
+    // The edit still reports itself, which is the panel that stayed.
+    expect(container.textContent).toContain("actual \u0394\u2113");
+  });
+});
+
+describe("a panel's help popup", () => {
+  let panel: HTMLElement;
+  let legend: HTMLElement;
+  let help: Help;
+
+  function button(): HTMLButtonElement {
+    return panel.querySelector<HTMLButtonElement>(".help-button")!;
+  }
+  function popup(): HTMLElement {
+    return document.querySelector<HTMLElement>(".help-popup")!;
+  }
+
+  beforeEach(() => {
+    document.body.replaceChildren();
+    panel = document.createElement("section");
+    panel.className = "panel";
+    const heading = document.createElement("h2");
+    heading.textContent = "Network";
+    legend = document.createElement("p");
+    legend.className = "legend";
+    legend.textContent = "Edge colour and width: weight w.";
+    panel.append(heading, legend);
+    document.body.append(panel);
+    help = createHelp(panel, legend, "Network");
+  });
+
+  afterEach(() => help.destroy());
+
+  it("TAKES THE EXPLANATION OUT OF THE PANEL, so it cannot cover it", () => {
+    // The popup is a child of the body, not of the panel, and the placement
+    // in help.ts puts it beside the panel; nothing nests it over the plot.
+    expect(panel.contains(legend)).toBe(false);
+    expect(popup().parentElement).toBe(document.body);
+    expect(popup().contains(legend)).toBe(true);
+    expect(help.isOpen()).toBe(false);
+    expect(popup().hidden).toBe(true);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens and closes from the question mark, and closes on Escape", () => {
+    button().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(help.isOpen()).toBe(true);
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+
+    button().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(help.isOpen()).toBe(false);
+
+    button().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
+    expect(help.isOpen()).toBe(false);
+  });
+
+  it("closes on a click outside itself, but not on one inside", () => {
+    button().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    popup().dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+    expect(help.isOpen()).toBe(true);
+    panel.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+    expect(help.isOpen()).toBe(false);
+  });
+
+  it("SHOWS WHATEVER THE PANEL LAST WROTE, since it holds the element itself", () => {
+    // The views keep writing their legend as the state changes; moving the
+    // element rather than copying its text is what keeps the popup current.
+    legend.textContent = "Edge colour and width: contribution w\u00b7a.";
+    button().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(popup().textContent).toContain("contribution w\u00b7a");
+  });
+});
+
+describe("the parameter tensors panel", () => {
+  let container: HTMLElement;
+  let explorer: Explorer;
+  let view: TensorsView;
+
+  /** Every tensor drawn, in document order: bias then weights, per layer. */
+  function blocks(): SVGElement[] {
+    return Array.from(container.querySelectorAll<SVGElement>(".tensor-block"));
+  }
+  function dotsOf(block: SVGElement): SVGElement[] {
+    return Array.from(block.querySelectorAll<SVGElement>(".tensor-dot"));
+  }
+  function bands(): SVGElement[] {
+    return Array.from(container.querySelectorAll<SVGElement>(".tensor-band"));
+  }
+  /** The slots a band covers: how the selection is read off the diagram. */
+  function covered(band: SVGElement, block: SVGElement): SVGElement[] {
+    const x = Number(band.getAttribute("x"));
+    const width = Number(band.getAttribute("width"));
+    return dotsOf(block).filter((dot) => {
+      const cx = Number(dot.getAttribute("cx"));
+      return cx > x && cx < x + width;
+    });
+  }
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.replaceChildren(container);
+    explorer = createExplorer(CHECKPOINT);
+    view = createTensorsView({ container });
+  });
+
+  it("DRAWS ONE SLOT PER PARAMETER, as a bias vector over a weight matrix", () => {
+    view.render(explorer.snapshot());
+    expect(blocks()).toHaveLength(2 * CHECKPOINT.parameters.length);
+    CHECKPOINT.parameters.forEach((layer, index) => {
+      const [bias, weights] = [blocks()[2 * index], blocks()[2 * index + 1]];
+      expect(dotsOf(bias)).toHaveLength(layer.b.length);
+      expect(dotsOf(weights)).toHaveLength(layer.W.flat().length);
+    });
+  });
+
+  it("names each tensor by its shape and the layers it joins", () => {
+    view.render(explorer.snapshot());
+    const titles = blocks().map((block) => block.querySelector("title")!.textContent);
+    expect(titles[0]).toBe(`1×${CHECKPOINT.parameters[0].b.length} biases for hidden layer 1`);
+    expect(titles[1]).toBe(
+      `${CHECKPOINT.parameters[0].W[0].length}×${CHECKPOINT.parameters[0].b.length} ` +
+        `weights connecting the input layer to hidden layer 1`,
+    );
+    expect(titles.at(-1)).toContain("to the output layer");
+  });
+
+  it("SHADES THE SELECTED UNIT's OWN BAND: its bias slot and its weights", () => {
+    explorer.selectUnit({ layer: 0, out: 2 });
+    view.render(explorer.snapshot());
+    const [biasBand, weightBand] = bands();
+    expect(bands()).toHaveLength(2);
+    // One slot of the bias vector, and the whole column under it: every
+    // weight feeding that unit, and nothing else.
+    expect(covered(biasBand, blocks()[0])).toHaveLength(1);
+    expect(covered(weightBand, blocks()[1])).toHaveLength(
+      CHECKPOINT.parameters[0].W[0].length,
+    );
+    expect(biasBand.getAttribute("x")).toBe(weightBand.getAttribute("x"));
+    // In this layer's group, not another's.
+    expect(covered(weightBand, blocks()[3])).toHaveLength(0);
+  });
+
+  it("moves the band one column along when the next unit is selected", () => {
+    explorer.selectUnit({ layer: 0, out: 1 });
+    view.render(explorer.snapshot());
+    const before = Number(bands()[0].getAttribute("x"));
+    const width = Number(bands()[0].getAttribute("width"));
+    explorer.selectUnit({ layer: 0, out: 2 });
+    view.render(explorer.snapshot());
+    expect(Number(bands()[0].getAttribute("x"))).toBeCloseTo(before + width, 6);
   });
 });

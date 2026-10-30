@@ -24,6 +24,15 @@ describe("niceLimit", () => {
     expect(niceLimit([0.1, 0.2], [-1.4], [0.3])).toBeCloseTo(1.5, 12);
   });
 
+  it("IS A NUMBER THAT PRINTS AS ROUND, since it is an axis tick", () => {
+    // 3 * 0.1 is 0.30000000000000004 in binary, which is what the
+    // parameters-to-output axis would then be labelled with.
+    expect(String(niceLimit([0.28]))).toBe("0.3");
+    expect(String(niceLimit([0.07]))).toBe("0.075");
+    expect(String(niceLimit([2.9e-4]))).toBe("0.0003");
+    expect(String(niceLimit([1.1]))).toBe("1.5");
+  });
+
   it("ignores non-finite values and never returns zero", () => {
     expect(niceLimit([Number.NaN, Number.POSITIVE_INFINITY])).toBe(1);
     expect(niceLimit([0, 0])).toBe(1);

@@ -9,13 +9,20 @@ import { describe, expect, it } from "vitest";
 
 import { parameterCurves, parameterRefs } from "../src/model/curves.js";
 import { forward } from "../src/model/evaluate.js";
-import { cloneParameters, writeParameter } from "../src/model/types.js";
+import {
+  cloneParameters,
+  parameterSymbol,
+  unitParameters,
+  writeParameter,
+} from "../src/model/types.js";
 import { loadCheckpoint, loadManifest } from "./fixtures.js";
 
 const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
 const ACTIVATION = CHECKPOINT.architecture.hiddenActivation!;
 const PROBE = [0.649, -0.64];
 const LIMIT = 1.5;
+/** The caller names the sweeps now; these tests want all of them. */
+const ALL = parameterRefs(CHECKPOINT.parameters);
 
 describe("parameterRefs", () => {
   it("names every weight and bias exactly once", () => {
@@ -29,9 +36,47 @@ describe("parameterRefs", () => {
   });
 });
 
+describe("a unit's parameters, in the order the panel lists them", () => {
+  it("PUTS THE BIAS FIRST, then the weights top to bottom as drawn", () => {
+    // nnet-svg lays a layer out in index order downward, so source index 0
+    // is the top node: ascending `in` is top to bottom in the diagram.
+    const refs = unitParameters(CHECKPOINT.parameters, { layer: 0, out: 2 });
+    expect(refs[0]).toEqual({ kind: "bias", layer: 0, out: 2 });
+    expect(refs.slice(1)).toEqual(
+      CHECKPOINT.parameters[0].W[2].map((_, input) => ({
+        kind: "weight",
+        layer: 0,
+        out: 2,
+        in: input,
+      })),
+    );
+    expect(refs.map(parameterSymbol)).toEqual(["b", "w\u2080", "w\u2081"]);
+  });
+
+  it("is exactly the parameters of that one neuron, and no others", () => {
+    const all = parameterRefs(CHECKPOINT.parameters).map((ref) => JSON.stringify(ref));
+    const units = CHECKPOINT.parameters.flatMap((layer, index) =>
+      layer.b.map((_, out) => ({ layer: index, out })),
+    );
+    const covered = units.flatMap((unit) =>
+      unitParameters(CHECKPOINT.parameters, unit).map((ref) => JSON.stringify(ref)),
+    );
+    // Every parameter belongs to exactly one unit: a partition, so no
+    // selection can ever leave a parameter unreachable or offer it twice.
+    expect(covered.slice().sort()).toEqual(all.slice().sort());
+    expect(new Set(covered).size).toBe(all.length);
+  });
+});
+
 describe("parameterCurves", () => {
+  it("SWEEPS ONLY THE PARAMETERS IT WAS GIVEN, in that order", () => {
+    const refs = unitParameters(CHECKPOINT.parameters, { layer: 1, out: 0 });
+    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, refs, 5);
+    expect(curves.map((curve) => curve.ref)).toEqual(refs);
+  });
+
   it("sweeps each parameter across the scale with everything else held", () => {
-    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, 5);
+    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, ALL, 5);
     for (const curve of curves) {
       expect(curve.values[0]).toBeCloseTo(-LIMIT, 12);
       expect(curve.values[4]).toBeCloseTo(LIMIT, 12);
@@ -47,7 +92,7 @@ describe("parameterCurves", () => {
 
   it("PASSES THROUGH THE CURRENT OUTPUT at every parameter's current value", () => {
     const output = forward(CHECKPOINT.parameters, ACTIVATION, PROBE).output;
-    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, 41);
+    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, ALL, 41);
     for (const curve of curves) {
       expect(curve.output).toBeCloseTo(output, 12);
       // The sweep really does reach that value where the dot is drawn:
@@ -67,7 +112,7 @@ describe("parameterCurves", () => {
   it("keeps every current value inside the swept range", () => {
     // The scale is built from the parameters themselves, so a dot can never
     // fall off the end of the axis.
-    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, 5);
+    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, ALL, 5);
     for (const curve of curves) {
       expect(Math.abs(curve.current)).toBeLessThanOrEqual(LIMIT);
     }
@@ -77,14 +122,14 @@ describe("parameterCurves", () => {
     // It sweeps by mutating a private copy; the explorer's own state is the
     // array handed in.
     const before = cloneParameters(CHECKPOINT.parameters);
-    parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, 7);
+    parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, ALL, 7);
     expect(CHECKPOINT.parameters).toEqual(before);
   });
 
   it("bends where a ReLU switches, instead of running straight", () => {
     // A first-layer bias drives its unit through zero somewhere in the
     // sweep, so its curve is not a single straight line.
-    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, 101);
+    const curves = parameterCurves(CHECKPOINT.parameters, ACTIVATION, PROBE, LIMIT, ALL, 101);
     const bent = curves.filter((curve) => {
       const slopes = curve.outputs
         .slice(1)

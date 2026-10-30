@@ -8,6 +8,10 @@
  *  - An edit never clears the selection. Students edit the thing they have
  *    selected and then look at it, so losing the selection on edit would
  *    break the core interaction (a Stage 0 exit condition).
+ *
+ * The selection is a *unit*, not a single parameter, and there is no empty
+ * selection: a neuron and everything feeding it is the smallest thing worth
+ * looking at, and the explorer opens on the output unit.
  */
 
 import {
@@ -29,11 +33,21 @@ import {
   readParameter,
   sameParameter,
   writeParameter,
+  sameUnit,
   type Activation,
   type Checkpoint,
   type LayerParameters,
   type ParameterRef,
+  type UnitRef,
 } from "./model/types.js";
+
+/**
+ * Where the probe opens, in each input, clamped into that input's own
+ * domain. Not the centre: the map draws its axes through the origin, and a
+ * probe sitting on them would hide them and zero out every input term of
+ * the first layer's sums.
+ */
+export const OPENING_PROBE = 0.5;
 
 export type Provenance =
   | { kind: "pretrained"; checkpointId: string }
@@ -63,7 +77,8 @@ export interface Snapshot {
   version: number;
   parameters: LayerParameters[];
   provenance: Provenance;
-  selection: ParameterRef | null;
+  /** The selected unit: its bias and every weight feeding it. Never null. */
+  selection: UnitRef;
   probe: Probe;
   x: number[];
   trace: Trace;
@@ -95,7 +110,7 @@ export interface Explorer {
   lastEdit(): EditRecord | null;
   subscribe(listener: (snapshot: Snapshot) => void): () => void;
 
-  selectParameter(ref: ParameterRef | null): void;
+  selectUnit(unit: UnitRef): void;
   setProbe(probe: Probe): void;
   setParameter(ref: ParameterRef, value: number): void;
 
@@ -125,13 +140,19 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
   };
   let parameters = cloneParameters(baseline.parameters);
   let provenance: Provenance = baseline.provenance;
-  let selection: ParameterRef | null = null;
-  // The input space opens with no samples drawn, so the probe starts at the
-  // centre of the domain rather than on top of sample 0: the first thing to
-  // do with that panel is move this.
+  // The output unit, so the panel opens on the parameters nearest the
+  // prediction: the ones whose sweeps move it most.
+  let selection: UnitRef = {
+    layer: checkpoint.parameters.length - 1,
+    out: 0,
+  };
+  // The input space opens with no samples drawn, so the probe starts off the
+  // origin and off sample 0: away from the axes it draws, with both inputs
+  // non-zero, so every term of the first neuron's sum is a real number. The
+  // first thing to do with that panel is move this.
   let probe: Probe = {
     kind: "free",
-    x: dataset.domain.map(([lo, hi]) => (lo + hi) / 2),
+    x: dataset.domain.map(([lo, hi]) => Math.min(hi, Math.max(lo, OPENING_PROBE))),
   };
   let version = 0;
   let edit: EditRecord | null = null;
@@ -221,8 +242,9 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
       return () => listeners.delete(listener);
     },
 
-    selectParameter(ref) {
-      selection = ref;
+    selectUnit(unit) {
+      if (sameUnit(unit, selection)) return;
+      selection = unit;
       edit = null;
       commit();
     },
@@ -312,4 +334,4 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
   };
 }
 
-export { sameParameter };
+export { sameParameter, sameUnit };

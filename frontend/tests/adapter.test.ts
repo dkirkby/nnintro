@@ -12,9 +12,11 @@ import {
   edgeKey,
   edgeKeyFromModel,
   edgeParameter,
+  edgeUnit,
   edgeWeight,
   nodeBias,
   nodeParameter,
+  nodeUnit,
 } from "../src/view/adapter.js";
 import type { LayerParameters } from "../src/model/types.js";
 import { forward } from "../src/model/evaluate.js";
@@ -105,6 +107,47 @@ describe("node index translation", () => {
   it("reads the bias a node represents", () => {
     expect(nodeBias(PARAMETERS, { kind: "node", layerIndex: 1, nodeIndex: 1 })).toBe(20);
     expect(nodeBias(PARAMETERS, { kind: "node", layerIndex: 2, nodeIndex: 0 })).toBe(30);
+  });
+});
+
+describe("unit translation: what a click selects", () => {
+  it("maps an edge onto the unit it FEEDS, not the one it leaves", () => {
+    // Source-first in, destination-first out: input 2 -> unit 1 selects
+    // unit 1 of parameter layer 0, so every edge into unit 1 comes with it.
+    expect(edgeUnit(edge(0, 2, 1))).toEqual({ layer: 0, out: 1 });
+    expect(edgeUnit(edge(0, 0, 1))).toEqual({ layer: 0, out: 1 });
+    expect(edgeUnit(edge(0, 2, 0))).toEqual({ layer: 0, out: 0 });
+    expect(edgeUnit(edge(1, 1, 0))).toEqual({ layer: 1, out: 0 });
+  });
+
+  it("agrees with the unit of the weight the edge represents", () => {
+    for (let source = 0; source < 3; source += 1) {
+      for (let target = 0; target < 2; target += 1) {
+        const ref = edgeParameter(edge(0, source, target));
+        expect(edgeUnit(edge(0, source, target))).toEqual({
+          layer: ref.layer,
+          out: ref.out,
+        });
+      }
+    }
+  });
+
+  it("maps a node onto its own unit, offset by one layer", () => {
+    expect(nodeUnit({ layerIndex: 1, nodeIndex: 1 })).toEqual({ layer: 0, out: 1 });
+    expect(nodeUnit({ layerIndex: 2, nodeIndex: 0 })).toEqual({ layer: 1, out: 0 });
+  });
+
+  it("a node and every edge into it are ONE selection", () => {
+    // The whole point of the new rule: clicking the node, or any of its
+    // incoming edges, lands on the same unit.
+    const node = nodeUnit({ layerIndex: 1, nodeIndex: 1 });
+    for (let source = 0; source < 3; source += 1) {
+      expect(edgeUnit(edge(0, source, 1))).toEqual(node);
+    }
+  });
+
+  it("gives the input layer no unit, so clicking one selects nothing", () => {
+    expect(nodeUnit({ layerIndex: 0, nodeIndex: 0 })).toBeNull();
   });
 });
 

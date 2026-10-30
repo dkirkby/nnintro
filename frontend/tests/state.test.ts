@@ -4,13 +4,27 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { createExplorer, describeProvenance, type Explorer } from "../src/state.js";
-import { readParameter, type ParameterRef } from "../src/model/types.js";
+import {
+  createExplorer,
+  describeProvenance,
+  OPENING_PROBE,
+  type Explorer,
+} from "../src/state.js";
+import {
+  readParameter,
+  unitOf,
+  type ParameterRef,
+  type UnitRef,
+} from "../src/model/types.js";
 import { loadCheckpoint, loadManifest } from "./fixtures.js";
 
 const CHECKPOINT = loadCheckpoint(loadManifest().checkpoints[0].url);
 const WEIGHT: ParameterRef = { kind: "weight", layer: 0, out: 1, in: 0 };
 const BIAS: ParameterRef = { kind: "bias", layer: 0, out: 2 };
+/** The unit each of those belongs to: what a click on either now selects. */
+const WEIGHT_UNIT: UnitRef = unitOf(WEIGHT);
+const BIAS_UNIT: UnitRef = unitOf(BIAS);
+const OUTPUT_UNIT: UnitRef = { layer: CHECKPOINT.parameters.length - 1, out: 0 };
 
 describe("createExplorer", () => {
   let explorer: Explorer;
@@ -28,30 +42,50 @@ describe("createExplorer", () => {
     expect(explorer.snapshot().test.meanLoss).toBeCloseTo(CHECKPOINT.metrics.testLoss, 12);
   });
 
+  it("OPENS ON THE OUTPUT UNIT, never on nothing", () => {
+    // There is no empty selection and no way to deselect: the explorer
+    // starts on the parameters nearest the prediction.
+    expect(explorer.snapshot().selection).toEqual(OUTPUT_UNIT);
+  });
+
+  it("OPENS WITH THE PROBE OFF THE ORIGIN, at (0.5, 0.5) here", () => {
+    // The map draws its axes through the origin; a probe there would sit on
+    // them, and would zero every input term of the first layer's sums.
+    expect(explorer.snapshot().x).toEqual([OPENING_PROBE, OPENING_PROBE]);
+    expect(explorer.snapshot().probe.kind).toBe("free");
+  });
+
   // The Stage 0 exit condition.
   it("PRESERVES THE SELECTION across a parameter edit", () => {
-    explorer.selectParameter(WEIGHT);
+    explorer.selectUnit(WEIGHT_UNIT);
     explorer.setParameter(WEIGHT, 0.5);
-    expect(explorer.snapshot().selection).toEqual(WEIGHT);
+    expect(explorer.snapshot().selection).toEqual(WEIGHT_UNIT);
     explorer.setParameter(BIAS, -0.25);
-    expect(explorer.snapshot().selection).toEqual(WEIGHT);
+    expect(explorer.snapshot().selection).toEqual(WEIGHT_UNIT);
   });
 
   it("preserves the selection across undo, redo and restore", () => {
-    explorer.selectParameter(BIAS);
+    explorer.selectUnit(BIAS_UNIT);
     explorer.setParameter(BIAS, 1.5);
     explorer.undo();
-    expect(explorer.snapshot().selection).toEqual(BIAS);
+    expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
     explorer.redo();
-    expect(explorer.snapshot().selection).toEqual(BIAS);
+    expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
     explorer.restoreBaseline();
-    expect(explorer.snapshot().selection).toEqual(BIAS);
+    expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
   });
 
   it("preserves the selection when the probe moves", () => {
-    explorer.selectParameter(WEIGHT);
+    explorer.selectUnit(WEIGHT_UNIT);
     explorer.setProbe({ kind: "free", x: [0.2, -0.4] });
-    expect(explorer.snapshot().selection).toEqual(WEIGHT);
+    expect(explorer.snapshot().selection).toEqual(WEIGHT_UNIT);
+  });
+
+  it("selects one unit whichever of its parameters was clicked", () => {
+    // A weight and the bias of the same neuron are the same selection: an
+    // edge selects the unit it feeds, with every other edge into it.
+    explorer.selectUnit(unitOf({ kind: "weight", layer: 0, out: 2, in: 1 }));
+    expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
   });
 
   it("never mutates the checkpoint it was built from", () => {
@@ -69,7 +103,7 @@ describe("createExplorer", () => {
 
   it("bumps the version on every change, so stale work is detectable", () => {
     const start = explorer.snapshot().version;
-    explorer.selectParameter(WEIGHT);
+    explorer.selectUnit(WEIGHT_UNIT);
     explorer.setParameter(WEIGHT, 0.1);
     expect(explorer.snapshot().version).toBeGreaterThan(start);
   });
@@ -181,7 +215,7 @@ describe("edit records as subscribers see them", () => {
     explorer.setParameter(BIAS, 0.75);
     const seen: (ReturnType<Explorer["lastEdit"]>)[] = [];
     explorer.subscribe(() => seen.push(explorer.lastEdit()));
-    explorer.selectParameter(WEIGHT);
+    explorer.selectUnit(WEIGHT_UNIT);
     explorer.undo();
     expect(seen).toEqual([null, null]);
   });

@@ -139,3 +139,65 @@ export function describeParameter(ref: ParameterRef): string {
     ? `W[${ref.layer}][${ref.out}][${ref.in}]`
     : `b[${ref.layer}][${ref.out}]`;
 }
+
+/**
+ * A destination unit: one neuron's own parameters, which is what the network
+ * panel selects. Selecting a unit selects its bias `b[layer][out]` *and*
+ * every weight `W[layer][out][·]` feeding it — the whole of `z = Σ wᵢaᵢ + b`
+ * for that neuron, and nothing else.
+ */
+export interface UnitRef {
+  layer: number;
+  out: number;
+}
+
+export function sameUnit(a: UnitRef, b: UnitRef): boolean {
+  return a.layer === b.layer && a.out === b.out;
+}
+
+/** The unit a parameter belongs to: the neuron it helps compute. */
+export function unitOf(ref: ParameterRef): UnitRef {
+  return { layer: ref.layer, out: ref.out };
+}
+
+export function inUnit(ref: ParameterRef, unit: UnitRef): boolean {
+  return sameUnit(unitOf(ref), unit);
+}
+
+/**
+ * A unit's parameters in the order the UI lists them: the bias first, then
+ * each incoming weight by source index. Source index 0 is the top node of
+ * the previous layer in the network diagram (nnet-svg lays a layer out in
+ * index order, downward), so this is top-to-bottom as drawn.
+ */
+export function unitParameters(
+  parameters: LayerParameters[],
+  unit: UnitRef,
+): ParameterRef[] {
+  const refs: ParameterRef[] = [{ kind: "bias", layer: unit.layer, out: unit.out }];
+  const row = parameters[unit.layer]?.W[unit.out] ?? [];
+  row.forEach((_, input) => {
+    refs.push({ kind: "weight", layer: unit.layer, out: unit.out, in: input });
+  });
+  return refs;
+}
+
+export function describeUnit(unit: UnitRef): string {
+  return `layer ${unit.layer + 1} unit ${unit.out}`;
+}
+
+const SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉";
+
+/**
+ * The short name a parameter wears next to its curve and its slider: `b` for
+ * the bias, `wᵢ` for the weight from source unit `i`. Unambiguous only
+ * within one unit, which is the only place it is used.
+ */
+export function parameterSymbol(ref: ParameterRef): string {
+  if (ref.kind === "bias") return "b";
+  const digits = String(ref.in)
+    .split("")
+    .map((digit) => SUBSCRIPTS[Number(digit)])
+    .join("");
+  return `w${digits}`;
+}

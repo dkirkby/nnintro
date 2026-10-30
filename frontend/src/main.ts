@@ -14,13 +14,14 @@
 import { fetchCheckpoint, fetchManifest } from "./model/catalog.js";
 import { parameterCurves } from "./model/curves.js";
 import { hiddenActivation } from "./model/evaluate.js";
-import { computeRipple, originOf, type Ripple } from "./model/ripple.js";
 import { outputSlice, outputSurface, type Surface } from "./model/surface.js";
-import { describeParameter, type LayerParameters } from "./model/types.js";
+import {
+  unitParameters,
+  type LayerParameters,
+} from "./model/types.js";
 import {
   createExplorer,
   describeProvenance,
-  type EditRecord,
   type Explorer,
   type Snapshot,
 } from "./state.js";
@@ -34,7 +35,9 @@ import {
   NODE_LEGEND,
   type DisplayMode,
 } from "./view/network.js";
+import { createHelp } from "./view/help.js";
 import { createParamSpaceView } from "./view/paramspace.js";
+import { createTensorsView } from "./view/tensors.js";
 
 async function start(): Promise<void> {
   const found = document.querySelector<HTMLElement>("#app");
@@ -59,18 +62,33 @@ async function start(): Promise<void> {
     </header>
     <div class="controls" id="controls"></div>
     <div class="workspace">
-      <section class="panel io-panel">
-        <h2>Inputs → output</h2>
-        <div id="input-output"></div>
-        <p class="legend" id="input-legend"></p>
-      </section>
+      <div class="column">
+        <section class="panel io-panel">
+          <h2>Inputs → output</h2>
+          <div id="input-output"></div>
+          <p class="legend" id="input-legend"></p>
+        </section>
+        <section class="panel tensor-panel">
+          <h2>Parameter Tensors</h2>
+          <div id="tensors"></div>
+          <p class="legend" id="tensor-legend">
+            Every parameter the network has, as the shapes they are stored in:
+            one group per layer, the bias vector above its weight matrix, and
+            one light dot per value. A column of a group is one unit of the
+            layer it feeds — its bias and the weights into it — so selecting a
+            unit in the network panel shades exactly that band. A row of a
+            weight matrix is one source the layer reads from. Hover a
+            rectangle to see what it is.
+          </p>
+        </section>
+      </div>
       <div class="stack">
         <section class="panel network-panel">
           <h2>Network</h2>
           <div id="network"></div>
           <p class="legend" id="legend"></p>
         </section>
-        <section class="panel">
+        <section class="panel param-panel">
           <h2>Parameters → output</h2>
           <div id="param-space"></div>
         </section>
@@ -84,7 +102,11 @@ async function start(): Promise<void> {
     container: app.querySelector("#network")!,
     layerSizes: checkpoint.architecture.layerSizes,
     idPrefix: `nn-${checkpoint.checkpointId}`,
-    onSelect: (ref) => explorer.selectParameter(ref),
+    // An input node owns no parameters, so a click on one selects nothing
+    // and leaves the current unit alone: there is no way to deselect.
+    onSelect: (unit) => {
+      if (unit) explorer.selectUnit(unit);
+    },
   });
   const inputOutput = createInputOutputView({
     container: app.querySelector("#input-output")!,
@@ -96,19 +118,37 @@ async function start(): Promise<void> {
     activation,
     targetName: dataset.targetName,
     inputNames: dataset.inputNames,
-    onEdit: (ref, value) => explorer.setParameter(ref, value),
-    onRestore: (ref) => explorer.restoreParameter(ref),
   });
   const paramSpace = createParamSpaceView({
     container: app.querySelector("#param-space")!,
     onEdit: (ref, value) => explorer.setParameter(ref, value),
   });
+  const tensors = createTensorsView({ container: app.querySelector("#tensors")! });
+
+  // Each panel's own explanation, in a popup beside it rather than printed
+  // under it: it is a paragraph read once, and it was crowding out the plot
+  // it explains. `createHelp` moves the legend element itself, so whatever
+  // writes its text keeps the popup current (see view/help.ts).
+  // Held by reference, because `createHelp` moves each element out of its
+  // panel: after this they are no longer reachable through `app`.
+  const legends = {
+    inputs: app.querySelector<HTMLElement>("#input-legend")!,
+    network: app.querySelector<HTMLElement>("#legend")!,
+  };
+  const explained: [string, HTMLElement, string][] = [
+    [".io-panel", legends.inputs, "Inputs → output"],
+    [".network-panel", legends.network, "Network"],
+    [".param-panel", app.querySelector<HTMLElement>("#param-space .legend")!, "Parameters → output"],
+    [".tensor-panel", app.querySelector<HTMLElement>("#tensor-legend")!, "Parameter Tensors"],
+  ];
+  for (const [panel, legend, name] of explained) {
+    createHelp(app.querySelector(panel)!, legend, name);
+  }
 
   let mode: DisplayMode = "weights";
   // Off to begin with: the panel is there to be probed, and four hundred
   // dots answer the question before the student has asked it.
   let showSamples = false;
-  let ripple: Ripple | null = null;
   let cached: { parameters: LayerParameters[]; surface: Surface } | null = null;
 
   const controls = buildControls(app.querySelector("#controls")!, explorer, {
@@ -163,32 +203,40 @@ async function start(): Promise<void> {
       outputSlice(snapshot.parameters, activation, dataset.domain, snapshot.x, axis),
     );
 
-    // One sweep per parameter, across the scale the x axis of that panel
+    // One sweep per parameter of the selected unit — its bias, then its
+    // weights top to bottom — across the scale the x axis of that panel
     // shows, at wherever the probe is now.
     const curves = parameterCurves(
       snapshot.parameters,
       activation,
       snapshot.x,
       palette.param.limit,
+      unitParameters(snapshot.parameters, snapshot.selection),
     );
 
     networkView.render(snapshot, mode, palette);
+    tensors.render(snapshot);
     inputOutput.render(snapshot, { surface, slices, palette, showSamples });
     paramSpace.render(snapshot, {
       curves,
       paramScale: palette.param,
       outputScale: palette.output,
       // Tall enough for every curve, so no sweep is cut off at an edge the
-      // reader cannot see.
-      outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
+      // reader cannot see. The 5% headroom is for the case where the sweep
+      // exactly reaches a round number — common when the selected unit is
+      // off and the current output *is* the extreme — which would otherwise
+      // draw the output line along the frame itself.
+      outputLimit: niceLimit(
+        curves.flatMap((curve) => curve.outputs.map((value) => value * 1.05)),
+      ),
     });
-    inspector.render(snapshot, explorer.lastEdit(), ripple);
+    inspector.render(snapshot, explorer.lastEdit());
     controls.sync(mode, showSamples);
     app.querySelector("#provenance")!.textContent = describeProvenance(snapshot.provenance);
 
-    app.querySelector("#legend")!.textContent =
+    legends.network.textContent =
       `${DISPLAY_MODES.find((entry) => entry.id === mode)!.legend} ${NODE_LEGEND}`;
-    app.querySelector("#input-legend")!.textContent =
+    legends.inputs.textContent =
       `Drag anywhere in the map to move the probe. The slices hold the other ` +
       `input where it is: left, ${dataset.inputNames[1]} varies at ` +
       `${dataset.inputNames[0]} = ${format(snapshot.x[0])}; below, ` +
@@ -198,17 +246,11 @@ async function start(): Promise<void> {
       (showSamples ? " Dashed marks are held-out samples." : "");
   }
 
-  explorer.subscribe((snapshot) => {
-    const edit = explorer.lastEdit();
-    ripple = edit ? rippleFor(edit, snapshot) : null;
-    render(snapshot);
-    if (edit) {
-      setStatus(
-        app,
-        `${describeParameter(edit.ref)}: ${format(edit.before)} → ${format(edit.after)}.`,
-      );
-    }
-  });
+  // No running commentary on edits: an edit's before and after are in the
+  // panels themselves — the slider's own readout, and the comparison in
+  // "Prediction and loss" — and a line repeating them below the fold was
+  // one more place to look.
+  explorer.subscribe(render);
 
   // The canvas cannot resolve the theme's custom properties, so it is the one
   // surface a light/dark switch does not repaint by itself.
@@ -217,14 +259,13 @@ async function start(): Promise<void> {
     .addEventListener("change", () => render(explorer.snapshot()));
 
   render(explorer.snapshot());
-  setStatus(app, "Drag in the map to probe, then select an edge or a node.");
-}
-
-function rippleFor(edit: EditRecord, snapshot: Snapshot): Ripple {
-  return computeRipple(edit.previous.trace, snapshot.trace, {
-    ...originOf(edit.ref),
-    kind: "parameter",
-  });
+  // Standing instructions, not a log: nothing below the panels changes as
+  // the explorer is used, so nothing down here can go stale.
+  setStatus(
+    app,
+    "Drag in the map to probe. Click a node, or any edge into it, to select " +
+      "that unit.",
+  );
 }
 
 function setStatus(app: HTMLElement, message: string): void {

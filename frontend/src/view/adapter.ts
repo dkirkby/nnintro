@@ -16,7 +16,12 @@
 
 import type { NodeRef } from "nnet-svg";
 
-import type { LayerParameters, ParameterRef } from "../model/types.js";
+import {
+  unitOf,
+  type LayerParameters,
+  type ParameterRef,
+  type UnitRef,
+} from "../model/types.js";
 
 /** The weight an edge displays: `W[target][source]` of the source layer. */
 export function edgeParameter(edge: {
@@ -39,6 +44,29 @@ export function nodeParameter(node: {
 }): ParameterRef | null {
   if (node.layerIndex === 0) return null;
   return { kind: "bias", layer: node.layerIndex - 1, out: node.nodeIndex };
+}
+
+/**
+ * The unit an edge feeds, which is what selecting that edge selects: the
+ * destination neuron, with its bias and every other weight into it.
+ */
+export function edgeUnit(edge: {
+  sourceLayerIndex: number;
+  targetNodeIndex: number;
+}): UnitRef {
+  return { layer: edge.sourceLayerIndex, out: edge.targetNodeIndex };
+}
+
+/**
+ * The unit a node *is*, or null for an input node, which computes nothing
+ * and so owns no parameters.
+ */
+export function nodeUnit(node: {
+  layerIndex: number;
+  nodeIndex: number;
+}): UnitRef | null {
+  const ref = nodeParameter(node);
+  return ref === null ? null : unitOf(ref);
 }
 
 /** An edge as the renderer and the layout both describe it. */
