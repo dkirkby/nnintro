@@ -53,9 +53,26 @@ drove is removed for now, so the dependency is currently unused and kept
 only against its return.
 
 No linter or formatter is configured, matching the sibling course projects.
+
 `data/` is gitignored working output; `frontend/public/data/` is the tracked
 snapshot the site is built from, and `nnintro publish` is the only thing that
 should write it.
+
+## Deployment
+
+The explorer is published to GitHub Pages at
+<https://dkirkby.github.io/nnintro/> by `.github/workflows/pages.yml` on every
+push to `main`. The job is `npm ci`, `npm run test`, `npm run build` and
+nothing else: **no Python runs in CI**. The checkpoints the site serves are the
+tracked snapshot under `frontend/public/data`, so new numbers reach the site by
+running `uv run nnintro publish` locally and committing what it wrote — the
+same rule as `../infoplane`.
+
+The golden fixtures run before the build rather than after it, because they are
+what certifies that snapshot: a checkpoint the browser's forward pass disagrees
+with should fail the job rather than reach the site. Vite's `base` is `"./"`, so
+the bundle is path-relative and the workflow needs no `configure-pages` step to
+inject the project-page path.
 
 ## The export contract
 
@@ -189,9 +206,6 @@ derivative against centered finite differences.
   regression generators are noiseless, so their splits cannot differ, and the
   classifiers' irreducible error is in the overlap of the classes rather than
   in which split a point landed in.
-- There is no GitHub Pages workflow yet, though the siblings deploy from
-  `main`. The build is a plain `npm run build`, so adding one is a deliberate
-  step rather than a default.
 - The plan proposes "a thin React interface". The spike uses plain TypeScript
   with no framework, matching `../mutual`; the numerical modules are already
   UI-independent, so adopting React later is additive. Revisit when the

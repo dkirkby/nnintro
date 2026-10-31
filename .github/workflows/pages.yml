@@ -1,0 +1,68 @@
+# Build the explorer and publish it to GitHub Pages.
+#
+# The site is static and its assets are the committed snapshot in
+# frontend/public/data, so this never runs the Python pipeline: it is
+# `npm ci && npm run test && npm run build` and nothing else. Refreshing the
+# checkpoints means running `uv run nnintro publish` locally and committing
+# the snapshot, which is what triggers this.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read the repo, mint the Pages deployment token. Nothing else.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish; queue
+# the newer one behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # From the lockfile: a fresh `npm install` trips an arborist bug on
+      # vitest's optional peer set and needs --legacy-peer-deps (see README).
+      - run: npm ci
+
+      # The golden fixtures are what certify the published snapshot, so they
+      # run before the thing that publishes it: a checkpoint the browser's
+      # forward pass disagrees with should not reach Pages. `npm run build`
+      # runs `tsc -b`, so the typecheck comes with it.
+      - run: npm run test
+
+      - run: npm run build
+
+      # No configure-pages step: vite's base is "./", so the bundle is
+      # already path-relative and needs no injected base URL.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

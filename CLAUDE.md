@@ -324,6 +324,15 @@ npm run build            # static site -> frontend/dist
 
 No linter or formatter is configured, matching the siblings.
 
+Pushing `main` deploys: `.github/workflows/pages.yml` runs `npm ci`, `npm run
+test` and `npm run build` and publishes `frontend/dist` to
+<https://dkirkby.github.io/nnintro/>. **No Python runs in CI**, so the site's
+checkpoints are whatever `frontend/public/data` holds at that commit — new
+numbers get there by running `uv run nnintro publish` locally and committing
+the snapshot. The fixtures run before the build because they are what
+certifies it; a snapshot the browser disagrees with should fail the job rather
+than reach the site.
+
 ## Expected stack and conventions (from the sibling projects)
 
 `PLAN.md` §7 proposes TypeScript + Vite + a thin React layer, with pure numerical modules
