@@ -382,8 +382,16 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
   column-gap: 7px;
   row-gap: 4px;
 }
-.param-plot {
+/* The plot and the two marks beside it. The figure is what holds the grid
+   column; the marks hang out of it on either side, out of flow, so the
+   plot's own axis is still the full width of that column and still the
+   same axis as the colour bar and the sliders underneath. */
+.param-figure {
   grid-column: 2;
+  position: relative;
+  min-width: 0;
+}
+.param-plot {
   display: block;
   width: 100%;
   height: auto;
@@ -404,8 +412,50 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
   stroke: var(--surface);
   stroke-width: 2.5px;
 }
-.output-level { stroke: var(--ink); stroke-width: 1.25; stroke-dasharray: 5 3; }
+/* The two levels the loss is made of. A hairline each: the triangles in
+   the margins are what point them out, and these only have to carry the
+   level across to them -- dashed for the prediction, dotted for the target,
+   so neither has to be read off a legend. */
+.output-level { stroke: var(--ink); stroke-width: 0.6; stroke-dasharray: 2 2.2; }
+.target-level {
+  stroke: var(--ink);
+  stroke-width: 0.8;
+  stroke-dasharray: 0.1 2.4;
+  stroke-linecap: round;
+}
 .param-zero { stroke: var(--ink-dim); stroke-width: 0.75; opacity: 0.5; }
+
+/* The output bar's two markers, on a plot instead of on a strip: the
+   prediction on the left, the probed sample's target on the right, each a
+   slim ink triangle whose tip touches the frame at its own level. Drawn
+   with borders rather than as SVG, because they live outside the plot's
+   own units (see view/paramspace.ts). */
+.param-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform: translateY(-50%);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+.param-marker.is-prediction { left: -9px; border-left: 9px solid var(--ink); }
+.param-marker.is-target { right: -9px; border-right: 9px solid var(--ink); }
+/* What each triangle points at, rotated like the output bar's own label
+   and the tensor panel's row names: a horizontal word would need a margin
+   wider than the mark it names. `vertical-rl` rather than a transform, so
+   the box it takes is the narrow one and the column beside the plot is not
+   widened by it. */
+.param-level-label {
+  position: absolute;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  color: var(--ink-dim);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.param-level-label.is-output { left: -22px; }
+.param-level-label.is-target { right: -22px; }
 
 .param-axis {
   grid-column: 2;

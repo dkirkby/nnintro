@@ -19,6 +19,17 @@
  * The background is the output scale standing up, as in the slices, so a
  * curve's height and the colour behind it are two readings of the same
  * prediction.
+ *
+ * Which makes this panel the network's output bar opened out: the same
+ * scale, the same two marks on it — a triangle on the left at the
+ * prediction, one on the right at the probed sample's target, each under
+ * its own rotated name — with the width that bar does not have spent on
+ * how the output moves as each of the unit's parameters is swept. The marks
+ * are HTML beside the plot rather than more SVG inside it, because the
+ * plot's own x axis is shared with the colour bar and the sliders below it
+ * (one grid column, see `.param-editor`): anything drawn in the SVG's own
+ * units would have to come out of that axis. They are positioned out of
+ * flow, so the column is exactly as wide as it was.
  */
 
 import type { ParameterCurve } from "../model/curves.js";
@@ -34,6 +45,17 @@ import { format } from "./network.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 const PLOT = { width: 300, height: 140 };
+/**
+ * How far a level's rotated name may be pulled back from an end of the
+ * axis, as a fraction of the plot's height.
+ *
+ * A word is about this much of a plot this shape, and one centred on the
+ * very top or bottom row would hang past the scale it names — which is not
+ * a rare case, since a classifier's target is always at one end. The
+ * marker it belongs to is never moved, so the label stays beside a mark
+ * that is at the true level.
+ */
+const LABEL_HALF = 0.16;
 
 export interface ParamSpaceView {
   render(snapshot: Snapshot, frame: ParamSpaceFrame): void;
@@ -49,6 +71,12 @@ export interface ParamSpaceFrame {
   outputScale: ColorScale;
   /** Half-height of the output axis, covering every curve. */
   outputLimit: number;
+  /**
+   * Whether the samples are on screen. The target is marked only when they
+   * are *and* the probe is on one of them — both conditions the reader can
+   * see — exactly as the network panel's output bar does it.
+   */
+  showSamples: boolean;
 }
 
 export interface ParamSpaceOptions {
@@ -87,6 +115,23 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
   svg.setAttribute("viewBox", `0 0 ${PLOT.width} ${PLOT.height}`);
   svg.setAttribute("class", "param-plot");
   svg.setAttribute("role", "img");
+
+  // The plot and the two marks that flank it. The marks are positioned
+  // against this wrapper and overhang it, so the plot keeps the whole grid
+  // column and the axis stays shared with the bar and the sliders.
+  const figure = document.createElement("div");
+  figure.className = "param-figure";
+  const predictionMark = marker("is-prediction");
+  const targetMark = marker("is-target");
+  // Each triangle says what its level is, as the output bar's "target"
+  // does: two marks on one scale need telling apart, and the name beside
+  // the left one is what makes the right one read as the other of a pair.
+  // The word, not the symbol: it pairs with "target" on the other side,
+  // and the symbol with its value is already printed inside the plot.
+  const outputLabel = levelLabel("is-output", "output");
+  const targetLabel = levelLabel("is-target", "target");
+  targetLabel.hidden = true;
+  figure.append(svg, predictionMark, targetMark, outputLabel, targetLabel);
 
   const bar = document.createElement("div");
   bar.className = "param-axis";
@@ -129,7 +174,7 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
       return { ref, name: label, slider, readout };
     });
     grid.replaceChildren(
-      svg,
+      figure,
       bar,
       ...rows.flatMap((row) => [row.name, row.slider, row.readout]),
     );
@@ -145,7 +190,7 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
   }
 
   function render(snapshot: Snapshot, frame: ParamSpaceFrame): void {
-    const { curves, paramScale: scale, outputScale, outputLimit } = frame;
+    const { curves, paramScale: scale, outputScale, outputLimit, showSamples } = frame;
 
     // The background is the output scale over the axis this plot actually
     // spans, which is taller than that scale's own limit; values past it
@@ -162,9 +207,36 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
     marks.push(line(zero, 0, zero, PLOT.height, "param-zero"));
 
     // The current output: every dot sits on it, which is the panel's one
-    // structural claim and the quickest way to see a bug here.
+    // structural claim and the quickest way to see a bug here. A hairline,
+    // because the triangle beside it is what points the level out; the
+    // line only has to join the dots to it.
     const level = toY(snapshot.trace.output);
     marks.push(line(0, level, PLOT.width, level, "output-level"));
+
+    /**
+     * The probed sample's target, where there is one to mark.
+     *
+     * Only with the samples shown and the probe on one of them: a free
+     * probe has a target on a generator with an analytic one, but marking
+     * it would put a level on the plot with nothing on screen to say where
+     * it came from. A classifier's target is a class label rather than a
+     * value on the logit axis, so it goes to the end of the axis its class
+     * wants — the same thing the map and the output bar do with it — and a
+     * regression target that is off this fitted axis is pinned to the end
+     * it ran past, with the real number in the marker's own tooltip.
+     */
+    const marked =
+      showSamples && snapshot.probe.kind === "sample" && snapshot.target !== null
+        ? snapshot.target
+        : null;
+    const isClassifier = snapshot.probability !== null;
+    const targetLevel =
+      marked === null
+        ? null
+        : toY(isClassifier ? (marked > 0.5 ? outputLimit : -outputLimit) : marked);
+    if (targetLevel !== null) {
+      marks.push(line(0, targetLevel, PLOT.width, targetLevel, "target-level"));
+    }
 
     // Curves first, then dots, then the symbols, so nothing a reader needs
     // in order to tell two parameters apart can be buried by a later one.
@@ -236,8 +308,32 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
       "aria-label",
       `${curves.length} parameters of ${describeUnit(snapshot.selection)} swept ` +
         `one at a time; every curve passes through ${outputName} = ` +
-        `${format(snapshot.trace.output)} at its current value.`,
+        `${format(snapshot.trace.output)} at its current value.` +
+        (marked === null
+          ? ""
+          : ` The probed sample's target is ${format(marked)}` +
+            `${isClassifier ? ", marked at the end of the axis" : ""}.`),
     );
+
+    // The two marks beside the plot, each on its own level. Percentages of
+    // the plot's height, so they follow it as the panel is resized without
+    // anything being measured.
+    place(predictionMark, level);
+    // Pulled back from the ends, like the target's: the word is longer
+    // than the triangle it names, and the triangle is not moved.
+    place(outputLabel, clampLabel(level));
+    predictionMark.title = `${outputName} = ${format(snapshot.trace.output)}`;
+    targetMark.hidden = targetLevel === null;
+    targetLabel.hidden = targetLevel === null;
+    if (targetLevel !== null && marked !== null) {
+      place(targetMark, targetLevel);
+      // Pulled back from the ends, where the word would otherwise hang
+      // past the axis it names; its marker stays where it belongs.
+      place(targetLabel, clampLabel(targetLevel));
+      targetMark.title = isClassifier
+        ? `target class ${format(marked)}`
+        : `target ${format(marked)}`;
+    }
 
     bar.style.backgroundImage = gradientBar(scale, -scale.limit, scale.limit, "to right");
     bar.setAttribute("aria-label", `parameter value, from −${scale.limit} to ${scale.limit}`);
@@ -267,7 +363,15 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
       `bias b and the weights wᵢ feeding it — swept across the scale above, ` +
       `everything else held. Drag a slider to edit that parameter and move ` +
       `its dot along its own curve; every other curve moves too, since they ` +
-      `are drawn with it held. Select another node or edge to change units.`;
+      `are drawn with it held. Select another node or edge to change units. ` +
+      `This is the network panel's output bar opened out: the dashed line ` +
+      `and the triangle on the left are ${outputName} now` +
+      (marked === null
+        ? `, and with the samples shown, probing one marks its target on ` +
+          `the right as well.`
+        : `, the dotted line and the triangle on the right are the probed ` +
+          `sample's target, and the gap between them is what the loss is ` +
+          `made of.`);
   }
 
   return {
@@ -282,6 +386,37 @@ export function createParamSpaceView(options: ParamSpaceOptions): ParamSpaceView
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));
+}
+
+/**
+ * A level's name, rotated beside its triangle and kept clear of the ends.
+ *
+ * `vertical-rl` rather than a rotation, so the box it takes is the narrow
+ * one and the column it hangs into is not widened by it (see styles.css).
+ */
+function levelLabel(className: string, text: string): HTMLElement {
+  const node = document.createElement("span");
+  node.className = `param-level-label ${className}`;
+  node.textContent = text;
+  return node;
+}
+
+/** Where a level's label may sit: its own level, held off either end. */
+function clampLabel(y: number): number {
+  return clamp(y, LABEL_HALF * PLOT.height, (1 - LABEL_HALF) * PLOT.height);
+}
+
+/** One of the triangles flanking the plot: ink, and a tooltip of its own. */
+function marker(className: string): HTMLElement {
+  const node = document.createElement("span");
+  node.className = `param-marker ${className}`;
+  node.setAttribute("aria-hidden", "true");
+  return node;
+}
+
+/** Put a mark at a level of the plot, in the plot's own units. */
+function place(node: HTMLElement, y: number): void {
+  node.style.top = `${((y / PLOT.height) * 100).toFixed(3)}%`;
 }
 
 function line(x1: number, y1: number, x2: number, y2: number, className: string): SVGElement {

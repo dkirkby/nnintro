@@ -628,7 +628,7 @@ describe("the parameters → output panel", () => {
   let edited: [ParameterRef, number] | null = null;
 
   /** Exactly what `main.ts` hands the panel: the selected unit's sweeps. */
-  function frame() {
+  function frame(showSamples = false) {
     const snapshot = explorer.snapshot();
     const curves = parameterCurves(
       snapshot.parameters,
@@ -641,6 +641,7 @@ describe("the parameters → output panel", () => {
       curves,
       paramScale: PALETTE.param,
       outputScale: PALETTE.output,
+      showSamples,
       // The same 5% headroom `main.ts` gives the axis.
       outputLimit: niceLimit(
         curves.flatMap((curve) => curve.outputs.map((value) => value * 1.05)),
@@ -688,6 +689,57 @@ describe("the parameters → output panel", () => {
     for (const dot of Array.from(container.querySelectorAll(".param-dot"))) {
       expect(Number(dot.getAttribute("cy"))).toBeCloseTo(level, 2);
     }
+  });
+
+  /** A mark's level, as the fraction of the plot's height it was put at. */
+  const levelOf = (selector: string) =>
+    Number(container.querySelector<HTMLElement>(selector)!.style.top.replace("%", "")) / 100;
+  /** The same thing for a line drawn in the plot's own 140-unit height. */
+  const lineLevel = (selector: string) =>
+    Number(container.querySelector(selector)!.getAttribute("y1")) / 140;
+
+  it("POINTS A TRIANGLE AT THE OUTPUT, beside the line every dot sits on", () => {
+    view.render(explorer.snapshot(), frame());
+    expect(levelOf(".param-marker.is-prediction")).toBeCloseTo(
+      lineLevel(".output-level"),
+      3,
+    );
+    expect(container.querySelector(".param-marker.is-prediction")!.getAttribute("title"))
+      .toContain("ŷ = ");
+    // Named beside the triangle, so the two marks on this scale read as a
+    // pair rather than as one line and one mystery.
+    const label = container.querySelector<HTMLElement>(".param-level-label.is-output")!;
+    expect(label.textContent).toBe("output");
+    expect(label.hidden).toBe(false);
+  });
+
+  it("MARKS THE TARGET ONLY WHERE ONE IS ON SCREEN, like the output bar", () => {
+    const target = () => container.querySelector<HTMLElement>(".param-marker.is-target")!;
+    const label = () => container.querySelector<HTMLElement>(".param-level-label.is-target")!;
+
+    // A free probe, samples or not: a target that is nowhere on screen is
+    // not marked here either.
+    view.render(explorer.snapshot(), frame(true));
+    expect(container.querySelector(".target-level")).toBeNull();
+    expect(target().hidden).toBe(true);
+    expect(label().hidden).toBe(true);
+
+    // On a sample, but with the samples put away: still nothing.
+    explorer.setProbe({ kind: "sample", index: 3 });
+    view.render(explorer.snapshot(), frame(false));
+    expect(container.querySelector(".target-level")).toBeNull();
+    expect(target().hidden).toBe(true);
+
+    // Both at once: the dotted level, its triangle and its rotated label.
+    view.render(explorer.snapshot(), frame(true));
+    expect(container.querySelector(".target-level")).not.toBeNull();
+    expect(target().hidden).toBe(false);
+    expect(label().hidden).toBe(false);
+    expect(label().textContent).toBe("target");
+    expect(levelOf(".param-marker.is-target")).toBeCloseTo(lineLevel(".target-level"), 3);
+    expect(target().title).toBe(
+      `target ${format(CHECKPOINT.dataset.samples.y[3])}`,
+    );
   });
 
   it("LISTS ONE SLIDER PER PARAMETER, the bias first then the weights", () => {
@@ -1261,6 +1313,47 @@ describe("a classifier's panels", () => {
     expect(CLASSIFIER_CHECKPOINT.dataset.task).toBe("classification");
     expect(CLASSIFIER_CHECKPOINT.architecture.outputTransform).toBe("sigmoid");
     expect(CLASSIFIER_CHECKPOINT.dataset.hasAnalyticTarget).toBe(false);
+  });
+
+  it("PUTS A CLASS TARGET AT THE END OF THE SWEEP AXIS, never on it", () => {
+    const view = createParamSpaceView({
+      container,
+      legend: document.createElement("p"),
+      outputName: "z",
+      onEdit: () => {},
+    });
+    const snapshot = explorer.snapshot();
+    const curves = parameterCurves(
+      snapshot.parameters,
+      CLASSIFIER_ACTIVATION,
+      snapshot.x,
+      CLASSIFIER_PALETTE.param.limit,
+      unitParameters(snapshot.parameters, snapshot.selection),
+    );
+    view.render(snapshot, {
+      curves,
+      paramScale: CLASSIFIER_PALETTE.param,
+      outputScale: CLASSIFIER_PALETTE.output,
+      showSamples: true,
+      outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
+    });
+
+    // 0 and 1 are labels, so the target goes to the end of the axis its
+    // class wants: the top for class 1, the bottom for class 0 — the same
+    // thing the map and the network's output bar do with it.
+    const target = CLASSIFIER_CHECKPOINT.dataset.samples.y[0];
+    const level = Number(container.querySelector(".target-level")!.getAttribute("y1"));
+    expect(level).toBeCloseTo(target > 0.5 ? 0 : 140, 6);
+    const mark = container.querySelector<HTMLElement>(".param-marker.is-target")!;
+    expect(mark.hidden).toBe(false);
+    // And the number it stands for is still said, since the level cannot.
+    expect(mark.title).toBe(`target class ${format(target)}`);
+    // The label is pulled back from the end, so the word stays on the plot.
+    const labelLevel = Number(
+      container.querySelector<HTMLElement>(".param-level-label.is-target")!.style.top.replace("%", ""),
+    );
+    expect(labelLevel).toBeGreaterThan(5);
+    expect(labelLevel).toBeLessThan(95);
   });
 
   it("READS THE OUTPUT AS A LOGIT, with the probability beside it", () => {
@@ -1853,6 +1946,7 @@ describe("the panels at every selectable shape", () => {
         curves,
         paramScale: palette.param,
         outputScale: palette.output,
+        showSamples: false,
         outputLimit: niceLimit(curves.flatMap((curve) => curve.outputs)),
       });
       // The fan-in of the output unit is the last hidden width, or the

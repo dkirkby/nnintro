@@ -487,6 +487,7 @@ async function start(): Promise<void> {
         curves,
         paramScale: palette.param,
         outputScale: palette.output,
+        showSamples,
         // Tall enough for every curve, so no sweep is cut off at an edge
         // the reader cannot see. The 5% headroom is for the case where the
         // sweep exactly reaches a round number — common when the selected

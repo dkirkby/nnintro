@@ -300,6 +300,27 @@ to edit a parameter: the inspector's parameter table and its per-parameter
 restore button are **removed**, so values beyond the ends of that axis are
 unreachable until something replaces them.
 
+**That panel is the network's output bar opened out**, and is meant to be
+read as one: the same output scale up its back, a triangle on the left at
+the prediction under a rotated "output", and — with the samples shown and
+the probe on one of them, the same two conditions the bar itself uses — a
+triangle on the right at that sample's target under a rotated "target".
+Both marks are named, where the bar names only its target, because here
+there are two of them on one scale and a lone word would leave the other
+mark to be guessed; the words rather than `ŷ`/`z`, which the plot already
+prints with the value. The gap between the short-dashed prediction level
+and the dotted target level is what the loss is made of;
+the width the bar does not have is spent on how the output moves as each
+parameter of the unit is swept. Both levels are hairlines, because the
+triangles are what point them out. A classifier's target goes to the end
+of the axis its class wants and a regression target off this fitted axis
+is pinned to the end it ran past, with the real number in the marker's
+tooltip — the same rule as the bar's `barY`. The marks are **HTML beside
+the plot, positioned out of flow** (`.param-marker`, `.param-target-label`),
+not more SVG inside it: the plot's own units are its x axis, which is
+shared with the colour bar and the sliders, so anything drawn in them
+would have to come out of that axis.
+
 The inspector is two panels: "Prediction and loss", which also carries the
 predicted-vs-actual comparison after an edit, and "Neuron: …", which reads
 top to bottom as the neuron computes: one table row per input term (`i=n`,
@@ -535,7 +556,12 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   along the frame. `view/colormap.ts`'s `niceLimit` snaps its result back to
   12 significant digits because that number is printed as a tick. The
   neuron panel's activation plot is fitted the same way, for the same
-  reason: its dot has to stay inside the frame as an edit moves it.
+  reason: its dot has to stay inside the frame as an edit moves it. The
+  target marked beside that plot is the one thing on it that this axis is
+  *not* fitted to — nothing guarantees a sample's target is within the
+  sweeps — so it is pinned to the end it ran past rather than allowed to
+  move the axis, which would make the sweeps shrink whenever a distant
+  sample was probed.
 - **The slices' value axis is the output scale, not their own range.** That
   is what makes a slice's height and its background two readings of one
   number, and its ticks are the only numbers the output scale has. Fitting
