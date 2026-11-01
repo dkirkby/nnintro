@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parameterCurves } from "../src/model/curves.js";
 import { outputSlice, outputSurface } from "../src/model/surface.js";
+import { thresholdLines } from "../src/model/thresholds.js";
 import { createExplorer, type Explorer } from "../src/state.js";
 import {
   describeParameter,
@@ -159,6 +160,23 @@ describe("the network view", () => {
       expect(container.querySelectorAll(".edge-outline")).toHaveLength(
         2 * CHECKPOINT.architecture.layerSizes[0],
       );
+    });
+
+    it("KNOCKS THE NUMBERS OUT where they sit on an ink disc", () => {
+      explorer.selectUnit(WEIGHT_UNIT);
+      view.render(explorer.snapshot(), netFrame({ showParameters: false }));
+      const labels = Array.from(
+        container.querySelectorAll<SVGElement>(".dn-node-label"),
+      );
+      expect(labels.length).toBeGreaterThan(0);
+      // The ink label would be invisible on a solid ink node, so every
+      // label but the selected unit's is knocked out instead; the selected
+      // node is turned inside out, so the ordinary label reads on it.
+      const plain = labels.filter((label) => label.classList.contains("is-plain"));
+      expect(plain).toHaveLength(labels.length - 1);
+      // With the parameters back on, no node is ink and nothing is knocked out.
+      view.render(explorer.snapshot(), netFrame());
+      expect(container.querySelectorAll(".dn-node-label.is-plain")).toHaveLength(0);
     });
 
     it("can put both away at once", () => {
@@ -366,6 +384,8 @@ describe("the input \u2192 output panel", () => {
       ),
       palette: PALETTE,
       showSamples,
+      thresholds: thresholdLines(snapshot.parameters, CHECKPOINT.dataset.domain),
+      showThresholds: true,
     };
   }
 
@@ -417,6 +437,54 @@ describe("the input \u2192 output panel", () => {
     // and the crosshairs, never over them.
     const marks = Array.from(container.querySelector(".io-marks")!.children);
     expect(marks.slice(0, 2)).toEqual(axes);
+  });
+
+  it("DRAWS EVERY FIRST-LAYER THRESHOLD, over the axes and under the probe", () => {
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, frame(true));
+    const drawn = Array.from(
+      container.querySelectorAll<SVGElement>(".io-marks .map-threshold"),
+    );
+    const expected = thresholdLines(snapshot.parameters, CHECKPOINT.dataset.domain);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(drawn).toHaveLength(expected.length);
+    for (const [index, mark] of drawn.entries()) {
+      const { unit, from, to } = expected[index];
+      expect(Number(mark.getAttribute("x1"))).toBeCloseTo(toPixelX(from[0]), 2);
+      expect(Number(mark.getAttribute("y1"))).toBeCloseTo(toPixelY(from[1]), 2);
+      expect(Number(mark.getAttribute("x2"))).toBeCloseTo(toPixelX(to[0]), 2);
+      expect(Number(mark.getAttribute("y2"))).toBeCloseTo(toPixelY(to[1]), 2);
+      // The only thing that says which unit a line belongs to.
+      expect(mark.querySelector("title")!.textContent).toContain(`unit ${unit}`);
+    }
+    // Straight after the two axes, so the model's lines are over the
+    // reference ones and under the samples and the crosshairs.
+    const marks = Array.from(container.querySelector(".io-marks")!.children);
+    expect(marks.slice(2, 2 + drawn.length)).toEqual(drawn);
+
+    view.render(snapshot, { ...frame(true), showThresholds: false });
+    expect(container.querySelectorAll(".map-threshold")).toHaveLength(0);
+  });
+
+  it("moves a threshold when the unit it belongs to is edited", () => {
+    view.render(explorer.snapshot(), frame());
+    /** Where unit n's line is, by the title that names it. */
+    const at = (unit: number) => {
+      const mark = Array.from(container.querySelectorAll(".map-threshold")).find(
+        (node) => node.querySelector("title")!.textContent!.includes(`unit ${unit}`),
+      )!;
+      return ["x1", "y1", "x2", "y2"].map((name) => mark.getAttribute(name)).join(" ");
+    };
+    const before = [at(0), at(1)];
+    // Unit 1's own bias: its line moves, and nobody else's does.
+    explorer.setParameter({ kind: "bias", layer: 0, out: 1 }, 0.25);
+    const snapshot = explorer.snapshot();
+    view.render(snapshot, {
+      ...frame(),
+      thresholds: thresholdLines(snapshot.parameters, CHECKPOINT.dataset.domain),
+    });
+    expect(at(1)).not.toBe(before[1]);
+    expect(at(0)).toBe(before[0]);
   });
 
   it("LINES THE SLICES UP WITH THE MAP's OWN AXES", () => {
@@ -1244,6 +1312,11 @@ describe("a classifier's panels", () => {
       ),
       palette: CLASSIFIER_PALETTE,
       showSamples: true,
+      thresholds: thresholdLines(
+        snapshot.parameters,
+        CLASSIFIER_CHECKPOINT.dataset.domain,
+      ),
+      showThresholds: true,
     });
 
     const limit = CLASSIFIER_PALETTE.output.limit;
@@ -1289,6 +1362,8 @@ describe("the samples on the map", () => {
       ),
       palette: PALETTE,
       showSamples: true,
+      thresholds: thresholdLines(snapshot.parameters, CHECKPOINT.dataset.domain),
+      showThresholds: true,
     });
 
     const samples = Array.from(container.querySelectorAll(".sample"));
@@ -1385,6 +1460,8 @@ describe("snapping the probe onto a sample", () => {
       ),
       palette: PALETTE,
       showSamples,
+      thresholds: thresholdLines(snapshot.parameters, domain),
+      showThresholds: true,
     };
   }
 

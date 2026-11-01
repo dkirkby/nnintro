@@ -11,6 +11,11 @@
  * The map carries its own two axes as thin dashed lines through the origin,
  * so a position on it can be read without counting from the edges.
  *
+ * Over them, and switchable, are the **thresholds**: one dotted line per
+ * unit of the first hidden layer, where that unit's preactivation is zero.
+ * They are the parameters drawn in input space — a ReLU surface's creases
+ * lie along them — and `model/thresholds.ts` computes them.
+ *
  * While the samples are visible a drag that lands inside a dot **snaps to
  * that sample**, and the probe becomes the sample rather than a free point
  * next to it: that is how a reader gets a real target and a real point loss
@@ -26,6 +31,7 @@
  */
 
 import type { Slice, Surface } from "../model/surface.js";
+import type { ThresholdLine } from "../model/thresholds.js";
 import type { DatasetSpec } from "../model/types.js";
 import type { Probe, Snapshot } from "../state.js";
 import { gradientBar, type ColorScale, type Palette } from "./colormap.js";
@@ -56,6 +62,9 @@ export interface InputOutputFrame {
   slices: Slice[];
   palette: Palette;
   showSamples: boolean;
+  /** Where each first-hidden-layer unit switches; empty if there is none. */
+  thresholds: ThresholdLine[];
+  showThresholds: boolean;
 }
 
 export interface InputOutputOptions {
@@ -188,7 +197,7 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
   }
 
   function render(snapshot: Snapshot, frame: InputOutputFrame): void {
-    const { surface, slices, palette, showSamples } = frame;
+    const { surface, slices, palette, showSamples, thresholds, showThresholds } = frame;
     samplesVisible = showSamples;
     drawSurface(surface, palette.output);
 
@@ -206,6 +215,28 @@ export function createInputOutputView(options: InputOutputOptions): InputOutputV
     if (x2lo < 0 && 0 < x2hi) {
       const zero = toPixelY(0);
       marks.push(line(0, zero, MAP, zero, "map-axis"));
+    }
+    // Each first-hidden-layer unit's threshold: the line where its own
+    // preactivation is zero, which for ReLU is its kink. Over the axes,
+    // because these are the model rather than a reference, and under the
+    // samples and the crosshairs, which are what the reader is pointing
+    // with. Named rather than labeled: up to eight lines across 300 units
+    // is already a lot, and a printed index on each would be a thicket.
+    if (showThresholds) {
+      for (const { unit, from, to } of thresholds) {
+        const mark = line(
+          toPixelX(from[0]),
+          toPixelY(from[1]),
+          toPixelX(to[0]),
+          toPixelY(to[1]),
+          "map-threshold",
+        );
+        const title = document.createElementNS(SVG, "title");
+        title.textContent =
+          `hidden unit ${unit}: preactivation zero along this line`;
+        mark.append(title);
+        marks.push(mark);
+      }
     }
     /** The sample the probe is sitting on, if it is sitting on one. */
     const probed = snapshot.probe.kind === "sample" ? snapshot.probe.index : null;

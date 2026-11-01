@@ -206,8 +206,25 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
 }
 .panel.is-dragging .panel-bar { cursor: grabbing; }
 .panel-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.panel-bar h2 { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-bar h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* The title folds the panel too, so it says so under the pointer. The
+     bar is still the drag handle: a drag that moved the panel does not
+     fold it (see view/workspace.ts). */
+  cursor: pointer;
+}
 .panel-fold { padding: 1px 7px; line-height: 1.2; border-radius: 6px; }
+/* The chevron is the one thing in the bar that is a picture rather than a
+   word, and at the button's own font size it was a speck. It is scaled
+   rather than set larger, because a transform takes no part in layout: the
+   capsule keeps exactly the size the small glyph gave it, so making the
+   arrow legible cannot nudge the title or the bar. */
+.panel-fold .fold-arrow { display: inline-block; transform: scale(1.8); }
 
 /* The body scrolls rather than the panel growing: the reader set this
    height, so content that outgrows it is the reader's business and not a
@@ -232,6 +249,10 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
 }
 .toggle { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; }
 .toggle input { accent-color: var(--accent); cursor: pointer; }
+/* A box with nothing to act on -- the thresholds of a network that has no
+   hidden layer -- is greyed in place rather than removed, like the display
+   modes with the parameters off. */
+.toggle.is-inert, .toggle.is-inert input { cursor: not-allowed; }
 
 /* The resize corner. Two short lines rather than an icon, in the panel's
    own ink, so it reads as part of the frame. */
@@ -294,6 +315,19 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
    slices' zero line, because the surface behind it is a value and these
    are only a reference. */
 .map-axis { stroke: var(--ink-dim); stroke-width: 0.75; stroke-dasharray: 3 3; opacity: 0.6; }
+/* Each first-hidden-layer unit's threshold: the line where its own
+   preactivation is zero, which for ReLU is its kink. Dotted rather than
+   dashed, so it is not read as one of the axes above, and a little
+   stronger than them because this one is the model rather than a
+   reference for reading off a position. */
+.map-threshold {
+  stroke: var(--ink-dim);
+  stroke-width: 1.2;
+  /* Round caps on a dash of almost no length: dots, not short dashes, so
+     the line cannot be taken for one of the dashed axes it crosses. */
+  stroke-dasharray: 0.1 2.6;
+  stroke-linecap: round;
+}
 .slice-curve-casing { fill: none; stroke: var(--surface); stroke-width: 3.5; stroke-linejoin: round; opacity: 0.85; }
 .slice-curve { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; }
 .slice-point { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
@@ -471,14 +505,23 @@ h2.has-help { display: flex; align-items: center; gap: 8px; }
 .dn-edge.is-faint { stroke: var(--ink-dim); stroke-opacity: 0.55; stroke-dasharray: 2 3; }
 
 /* Selection is black, not accent: the accent green is a parameter colour.
-   A node wears a thick outline of its own; an edge keeps its colour and gets
-   a thin outline drawn underneath it (see view/network.ts). */
-.dn-node.is-selected { stroke: var(--ink); stroke-width: 3; }
+   A node wears a thin ink outline of its own; an edge keeps its colour and
+   gets a pair of thin ink rails along it (see view/network.ts). One width
+   for both, so a selection is one weight of line everywhere: the ring
+   round the node is the same hairline as the rails beside its edges, and
+   what marks the unit is the ink, not the weight. */
+.dn-node.is-selected { stroke: var(--ink); stroke-width: 1; }
 /* With the parameters off every node is the same ink, and an ink ring on
    an ink disc says nothing. The selected unit is turned inside out
    instead: the panel's own colour inside the ring it already has. The
    selection is still black, never the accent. */
 .dn-node.is-plain.is-selected { fill: var(--surface); }
+/* And with every node a solid ink disc, an ink number on top of one is
+   unreadable: the label is knocked out instead, the panel's colour haloed
+   in ink so the part that overruns the disc still reads against the panel.
+   The selected node is the exception and gets no such class, since being
+   turned inside out leaves the ordinary label legible on it. */
+.dn-node-label.is-plain { fill: var(--surface); stroke: var(--ink); }
 .edge-outline { stroke: var(--ink); stroke-width: 1; }
 .edge-outline.is-faint { stroke-dasharray: 2 3; }
 

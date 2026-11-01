@@ -27,6 +27,7 @@ import {
 import { parameterCurves } from "./model/curves.js";
 import { hiddenActivation } from "./model/evaluate.js";
 import { outputSlice, outputSurface, type Surface } from "./model/surface.js";
+import { thresholdLines } from "./model/thresholds.js";
 import { unitParameters, type Checkpoint, type LayerParameters } from "./model/types.js";
 import { createExplorer, describeProvenance, type Explorer, type Snapshot } from "./state.js";
 import { createColorScale, niceLimit, outputLimit, type Palette } from "./view/colormap.js";
@@ -78,6 +79,7 @@ const PANELS: PanelSpec[] = [
     rect: { x: 0, y: 0, w: 5, h: 36 },
     limits: { minW: 3, maxW: 12, minH: 14, maxH: 80 },
     body: `
+      <div class="panel-toggles" id="input-toggles"></div>
       <div id="input-output"></div>
       <p class="legend" id="input-legend"></p>
     `,
@@ -138,6 +140,13 @@ const PANELS: PanelSpec[] = [
     body: `<div id="neuron"></div>`,
   },
 ];
+
+/**
+ * The input panel's one switch, named once: the shell builds the box and
+ * the session has to find it again to grey it out where the network has no
+ * hidden layer to have thresholds.
+ */
+const THRESHOLDS = "Thresholds";
 
 /** One checkpoint's explorer and views: everything a switch replaces. */
 interface Session {
@@ -208,26 +217,47 @@ async function start(): Promise<void> {
   // than part of the row at the top.
   let showValues = true;
   let showParameters = true;
+  // On as well, and for the same reason: the lines are where the first
+  // hidden layer's units switch, which is the most direct thing the map can
+  // say about the parameters. A reader who wants the surface alone turns
+  // them off.
+  let showThresholds = true;
 
   let session: Session | null = null;
   let selection: Selection = openingSelection(index);
   /** Which load is the current one: a superseded fetch must not mount. */
   let request = 0;
 
-  buildNetworkToggles(app.querySelector("#network-toggles")!, {
-    setValues: (next) => {
-      showValues = next;
-      session?.render();
-    },
-    setParameters: (next) => {
-      showParameters = next;
-      session?.render();
-      // The display modes only switch what an edge's colour and width
-      // show, so with the parameters off there is nothing for them to
-      // switch: they are disabled in place rather than left live and inert.
-      controls.sync(mode, showSamples, showParameters);
-    },
-  });
+  buildToggles(app.querySelector("#network-toggles")!, [
+    [
+      "Values",
+      (next) => {
+        showValues = next;
+        session?.render();
+      },
+    ],
+    [
+      "Parameters",
+      (next) => {
+        showParameters = next;
+        session?.render();
+        // The display modes only switch what an edge's colour and width
+        // show, so with the parameters off there is nothing for them to
+        // switch: they are disabled in place rather than left live and inert.
+        controls.sync(mode, showSamples, showParameters);
+      },
+    ],
+  ]);
+
+  const inputToggles = buildToggles(app.querySelector("#input-toggles")!, [
+    [
+      THRESHOLDS,
+      (next) => {
+        showThresholds = next;
+        session?.render();
+      },
+    ],
+  ]);
 
   const controls = buildControls(app.querySelector("#controls")!, {
     current: () => session?.explorer ?? null,
@@ -369,6 +399,11 @@ async function start(): Promise<void> {
     });
     const tensors = createTensorsView({ container: app.querySelector("#tensors")! });
 
+    // A threshold belongs to a unit of the first hidden layer, so a network
+    // without one has none to draw: the box is greyed in place rather than
+    // left live over a map it cannot change.
+    inputToggles.setEnabled(THRESHOLDS, checkpoint.architecture.layerSizes.length > 2);
+
     let cached: { parameters: LayerParameters[]; surface: Surface } | null = null;
 
     /** The surface only depends on the parameters, which the probe never moves. */
@@ -415,6 +450,11 @@ async function start(): Promise<void> {
       const slices = dataset.domain.map((_, axis) =>
         outputSlice(snapshot.parameters, activation, dataset.domain, snapshot.x, axis),
       );
+      // Where each first-hidden-layer unit switches. Computed here rather
+      // than in the panel, like everything else it draws, and cheap enough
+      // to redo per render: it is one line per hidden unit of the first
+      // layer, and the widest this catalog goes is eight.
+      const thresholds = thresholdLines(snapshot.parameters, dataset.domain);
 
       // One sweep per parameter of the selected unit — its bias, then its
       // weights top to bottom — across the scale the x axis of that panel
@@ -435,7 +475,14 @@ async function start(): Promise<void> {
         showParameters,
       });
       tensors.render(snapshot);
-      inputOutput.render(snapshot, { surface, slices, palette, showSamples });
+      inputOutput.render(snapshot, {
+        surface,
+        slices,
+        palette,
+        showSamples,
+        thresholds,
+        showThresholds,
+      });
       paramSpace.render(snapshot, {
         curves,
         paramScale: palette.param,
@@ -476,6 +523,19 @@ async function start(): Promise<void> {
             `beyond them saturates.`) +
         ` With the samples shown, dragging inside a dot snaps the probe onto ` +
         `that sample, which is where its target and its point loss come from.` +
+        (thresholds.length === 0
+          ? ` This network has no hidden layer, so there are no thresholds ` +
+            `to show.`
+          : ` The dotted lines are the thresholds: one per unit of the ` +
+            `first hidden layer, where that unit's own preactivation is ` +
+            `zero — for ${activation} that is ` +
+            (activation === "relu"
+              ? `its kink, with the unit contributing nothing on one side ` +
+                `of the line and z on the other, so the creases in the ` +
+                `surface lie along them`
+              : `where the unit is at its most sensitive`) +
+            `. Hover one to see which unit it belongs to, and watch it move ` +
+            `as you edit that unit's weights or bias.`) +
         (isClassifier
           ? ` The neutral band is the decision boundary: the logit is zero ` +
             `there, so p = 0.5. Samples are drawn at the end of the scale ` +
@@ -604,8 +664,6 @@ function buildControls(
     ["Load pre-trained", (explorer) => explorer.loadPretrained()],
     ["Randomize all", (explorer) => explorer.randomize()],
     ["Restore baseline", (explorer) => explorer.restoreBaseline()],
-    ["Undo", (explorer) => explorer.undo()],
-    ["Redo", (explorer) => explorer.redo()],
   ];
   for (const [label, action] of buttons) {
     const button = document.createElement("button");
@@ -645,27 +703,36 @@ function buildControls(
   };
 }
 
-interface ToggleHandlers {
-  setValues: (next: boolean) => void;
-  setParameters: (next: boolean) => void;
+/** A panel's own switches, and the ones that can go inert. */
+interface Toggles {
+  /**
+   * Grey one out where it has nothing to act on, leaving it in place and
+   * still checked: a control that vanished would move the others out from
+   * under the pointer, and one left live and inert would lie.
+   */
+  setEnabled(name: string, enabled: boolean): void;
 }
 
 /**
- * The network panel's own two boxes: the numbers on the nodes, and the
- * parameters the colours stand for.
+ * A panel's own boxes, over the figure they act on rather than in the row
+ * at the top: they are about that one figure.
  *
- * They live in the panel rather than in the row at the top because they
- * are about this one figure, and because the point of them is to build it
- * up: the shape of the network first, then what the parameters do to it,
- * then the numbers themselves. Like the other display preferences they
- * belong to the reader and are held by the shell, so a checkpoint switch
- * does not quietly turn them back on.
+ * The network's two — the numbers on the nodes, and the parameters the
+ * colours stand for — are there to build the figure up: the shape of the
+ * network first, then what the parameters do to it, then the numbers
+ * themselves. The input panel's one puts the first hidden layer's
+ * thresholds over the map. Like the other display preferences they belong
+ * to the reader and are held by the shell, so a checkpoint switch does not
+ * quietly turn them back on.
+ *
+ * Every box starts checked, which is what makes these switches for putting
+ * something away rather than for finding it.
  */
-function buildNetworkToggles(container: HTMLElement, handlers: ToggleHandlers): void {
-  const boxes: [string, (next: boolean) => void][] = [
-    ["Values", handlers.setValues],
-    ["Parameters", handlers.setParameters],
-  ];
+function buildToggles(
+  container: HTMLElement,
+  boxes: [string, (next: boolean) => void][],
+): Toggles {
+  const inputs = new Map<string, HTMLInputElement>();
   container.replaceChildren(
     ...boxes.map(([name, set]) => {
       const label = document.createElement("label");
@@ -675,9 +742,18 @@ function buildNetworkToggles(container: HTMLElement, handlers: ToggleHandlers): 
       box.checked = true;
       box.addEventListener("change", () => set(box.checked));
       label.append(box, document.createTextNode(` ${name}`));
+      inputs.set(name, box);
       return label;
     }),
   );
+  return {
+    setEnabled(name, enabled) {
+      const box = inputs.get(name);
+      if (!box) return;
+      box.disabled = !enabled;
+      box.closest(".toggle")?.classList.toggle("is-inert", !enabled);
+    },
+  };
 }
 
 void start().catch((error: unknown) => {

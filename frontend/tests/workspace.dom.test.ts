@@ -154,6 +154,38 @@ describe("the workspace", () => {
     expect(box("below").y).toBe(10);
   });
 
+  it("FOLDS IT BY ITS TITLE TOO, since that is the part of the bar one aims at", () => {
+    const title = bar("left").querySelector<HTMLElement>("h2")!;
+    // A press and release that went nowhere: a click, not a drag.
+    gesture(title, 0, 0);
+    expect(section("left").classList.contains("is-minimised")).toBe(true);
+    expect(rows("left")).toBe(MINIMISED_ROWS);
+    gesture(title, 0, 0);
+    expect(rows("left")).toBe(10);
+  });
+
+  it("DOES NOT FOLD A PANEL DRAGGED BY ITS TITLE, which is still the handle", () => {
+    const title = bar("right").querySelector<HTMLElement>("h2")!;
+    gesture(title, -6 * COLUMN, 0);
+    expect(box("right").x).toBe(0);
+    expect(section("right").classList.contains("is-minimised")).toBe(false);
+    // And the next press, which goes nowhere, folds it as usual: the drag
+    // is not remembered past its own gesture.
+    gesture(title, 0, 0);
+    expect(section("right").classList.contains("is-minimised")).toBe(true);
+  });
+
+  it("keeps the chevron in a span of its own, which is what the stylesheet scales", () => {
+    const fold = section("left").querySelector<HTMLButtonElement>(".panel-fold")!;
+    const arrow = fold.querySelector(".fold-arrow")!;
+    expect(arrow.textContent).toBe("▾");
+    fold.click();
+    expect(arrow.textContent).toBe("▸");
+    // The name is on the button, so the glyph itself is nothing to read.
+    expect(arrow.getAttribute("aria-hidden")).toBe("true");
+    expect(fold.getAttribute("aria-label")).toBe("Expand The left one");
+  });
+
   it("MOVES A PANEL BY ITS TITLE BAR, pushing what it lands on down", () => {
     gesture(bar("right"), -6 * COLUMN, 0);
     expect(box("right").x).toBe(0);

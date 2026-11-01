@@ -139,14 +139,10 @@ export interface Explorer {
   randomize(seed?: number): void;
   restoreParameter(ref: ParameterRef): void;
   restoreBaseline(): void;
-
-  canUndo(): boolean;
-  canRedo(): boolean;
-  undo(): void;
-  redo(): void;
 }
 
-interface HistoryEntry {
+/** A set of parameters and where it came from: the baseline is one of these. */
+interface ParameterState {
   parameters: LayerParameters[];
   provenance: Provenance;
 }
@@ -163,7 +159,7 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
     );
   }
 
-  let baseline: HistoryEntry = {
+  let baseline: ParameterState = {
     parameters: cloneParameters(checkpoint.parameters),
     provenance: { kind: "pretrained", checkpointId: checkpoint.checkpointId },
   };
@@ -186,8 +182,6 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
   let version = 0;
   let edit: EditRecord | null = null;
 
-  const past: HistoryEntry[] = [];
-  const future: HistoryEntry[] = [];
   const listeners = new Set<(snapshot: Snapshot) => void>();
   let current = evaluate();
 
@@ -241,10 +235,8 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
     for (const listener of listeners) listener(current);
   }
 
-  /** Replace the working parameters, recording the previous state. */
+  /** Replace the working parameters. */
   function replace(next: LayerParameters[], nextProvenance: Provenance): void {
-    past.push({ parameters, provenance });
-    future.length = 0;
     parameters = next;
     provenance = nextProvenance;
     // Selection deliberately survives: see the module comment.
@@ -331,29 +323,6 @@ export function createExplorer(checkpoint: Checkpoint): Explorer {
     restoreBaseline() {
       edit = null;
       replace(cloneParameters(baseline.parameters), baseline.provenance);
-    },
-
-    canUndo: () => past.length > 0,
-    canRedo: () => future.length > 0,
-
-    undo() {
-      const entry = past.pop();
-      if (!entry) return;
-      future.push({ parameters, provenance });
-      parameters = entry.parameters;
-      provenance = entry.provenance;
-      edit = null;
-      commit();
-    },
-
-    redo() {
-      const entry = future.pop();
-      if (!entry) return;
-      past.push({ parameters, provenance });
-      parameters = entry.parameters;
-      provenance = entry.provenance;
-      edit = null;
-      commit();
     },
   };
 }

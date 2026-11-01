@@ -283,7 +283,17 @@ export function createNetworkView(options: NetworkViewOptions): NetworkView {
       // their never having been offered.
       nodeLabel: (node) =>
         !showValues || node.value === undefined ? null : format(node.value),
-      nodeLabelAttrs: () => ({ class: "dn-node-label" }),
+      // With the parameters off every node is a solid ink disc, and the
+      // ordinary label — ink, haloed in the panel's colour — is unreadable
+      // on one. `is-plain` knocks it out instead (see styles.css). The
+      // selected node is the exception: it is turned inside out, so the
+      // ordinary label is exactly right on it.
+      nodeLabelAttrs: (node) => ({
+        class:
+          showParameters || isSelectedUnit(nodeUnit(node))
+            ? "dn-node-label"
+            : "dn-node-label is-plain",
+      }),
       edgeTitle: (edge) =>
         `${mode === "contributions" ? "contribution" : "weight"} ${format(edge.value)}`,
       nodeTitle: (node) =>

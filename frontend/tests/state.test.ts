@@ -1,6 +1,6 @@
 /**
  * The interaction contract: an edit preserves the selection, the baseline
- * stays immutable, provenance is honest, and undo is exact.
+ * stays immutable, provenance is honest, and a restore is exact.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -64,12 +64,10 @@ describe("createExplorer", () => {
     expect(explorer.snapshot().selection).toEqual(WEIGHT_UNIT);
   });
 
-  it("preserves the selection across undo, redo and restore", () => {
+  it("preserves the selection across a restore", () => {
     explorer.selectUnit(BIAS_UNIT);
     explorer.setParameter(BIAS, 1.5);
-    explorer.undo();
-    expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
-    explorer.redo();
+    explorer.restoreParameter(BIAS);
     expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
     explorer.restoreBaseline();
     expect(explorer.snapshot().selection).toEqual(BIAS_UNIT);
@@ -121,14 +119,6 @@ describe("createExplorer", () => {
     expect(() => explorer.setParameter(WEIGHT, Number.NaN)).toThrow(RangeError);
     expect(() => explorer.setParameter(WEIGHT, Number.POSITIVE_INFINITY)).toThrow(RangeError);
     expect(explorer.snapshot().parameters).toEqual(CHECKPOINT.parameters);
-  });
-
-  it("undo restores the parameters exactly", () => {
-    const before = JSON.stringify(explorer.snapshot().parameters);
-    explorer.setParameter(WEIGHT, 1.25);
-    expect(JSON.stringify(explorer.snapshot().parameters)).not.toBe(before);
-    explorer.undo();
-    expect(JSON.stringify(explorer.snapshot().parameters)).toBe(before);
   });
 
   it("restores one parameter without disturbing the others", () => {
@@ -216,7 +206,7 @@ describe("edit records as subscribers see them", () => {
     const seen: (ReturnType<Explorer["lastEdit"]>)[] = [];
     explorer.subscribe(() => seen.push(explorer.lastEdit()));
     explorer.selectUnit(WEIGHT_UNIT);
-    explorer.undo();
+    explorer.setProbe({ kind: "free", x: [0.2, -0.4] });
     expect(seen).toEqual([null, null]);
   });
 

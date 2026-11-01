@@ -32,7 +32,17 @@ the deviations from `PLAN.md`; keep both current when that contract changes.
 **The panels are a canvas the reader arranges**, not a fixed grid
 (`view/workspace.ts`, with the geometry in `view/layout.ts`). Each panel is
 a card on twelve columns and rows of 16 pixels: drag it by its title bar,
-resize it from the corner, fold it down to the bar alone with the chevron.
+resize it from the corner, fold it down to the bar alone with the chevron —
+or with a click on its title, which is the part of the bar a reader aims at
+anyway. The title is also the handle, so the two are told apart by whether
+the gesture moved the panel: a press that went nowhere folds, a drag does
+not. That decision is made on the pointer gesture itself (`moved` in
+`view/workspace.ts`) rather than in a `click` listener, because the
+pointerdown is cancelled to keep a drag from selecting the title's text and
+a cancelled pointerdown may take the compatibility click with it. The
+chevron is a span the stylesheet *scales*, not a larger glyph: a transform
+takes no part in layout, so the arrow can be read without the button's
+capsule growing and shoving the title along.
 The point is a figure that can be built up a piece at a time — five views of
 one computation all at once is a wall, and a reader who has just met the
 network diagram can keep the rest minimised until they are wanted. The
@@ -121,7 +131,24 @@ crosshairs crosses all three and each slice's curve meets it at the
 prediction, so a misaligned axis shows up immediately; `tests/view.dom.test.ts`
 pins the alignment. The map also draws its own two axes — thin dashed lines
 where each input is zero, under the samples and the crosshairs — so a
-position can be read without counting in from the edges. Training and held-out samples are drawn **alike**: the split is a number in
+position can be read without counting in from the edges.
+
+**The map draws the first hidden layer's thresholds**, over those axes and
+under the samples and the crosshairs: one dotted line per unit, where that
+unit's own preactivation is zero — for ReLU exactly its kink, so a ReLU
+surface's creases lie along them. `model/thresholds.ts` computes the
+segments (pure geometry, clipped to the domain) and the panel only draws
+them, like everything else it shows. Dotted, where the axes are dashed, so
+the two cannot be confused; a unit whose line misses the domain, or that
+has no line at all because both its input weights are zero, is left out
+rather than drawn degenerate. The panel's own `Thresholds` box turns them
+off, on by default, and is greyed **in place** for a network with no hidden
+layer. Only the first hidden layer has lines: a later unit reads
+activations rather than inputs, so its zero set is a folded curve rather
+than a line, and the output's own zero is the prediction, which the map
+already draws as a colour.
+
+Training and held-out samples are drawn **alike**: the split is a number in
 "Prediction and loss", not a glyph to decode. No checkpoint in this catalog
 can show a gap the map would explain — the two regression generators are
 noiseless, so their splits agree by construction, and the classifiers'
@@ -150,7 +177,9 @@ The display modes now only switch what the **edges** show (weight or
 contribution). Node fills never vary with the mode.
 
 **The network panel has two switches of its own**, over the figure rather
-than in the row at the top, because they are about this one panel:
+than in the row at the top, because they are about this one panel — the
+same pattern as the input panel's `Thresholds` box, and `buildToggles` in
+`main.ts` builds both:
 `Values` takes the number off every node, and `Parameters` takes away what
 the colours stand for — every edge becomes the same medium grey line, every
 node the same ink disc, and a zero weight is no longer dotted, because
@@ -162,7 +191,12 @@ nothing to switch, so they are disabled in place. The one thing that cannot
 just be inked over is the selection: an ink ring on an ink disc says
 nothing, so the selected node is turned inside out instead (`.is-plain.is-
 selected` in `styles.css`) and keeps the panel's own colour inside the ring
-it already has. Selection is still black, never the accent.
+it already has. Selection is still black, never the accent. The numbers
+need the same treatment for the same reason: with the parameters off every
+other node is a solid ink disc, so its label is **knocked out** — the
+panel's colour, haloed in ink so the part that overruns the disc still
+reads against the panel (`.dn-node-label.is-plain`). The selected node is
+the one exception, being already inside out.
 
 The diagram is **centred vertically in whatever height the panel has**, and
 never taller than it: `height: auto` sizes it from the width, a
@@ -378,12 +412,20 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   and the one-input slices through the probe. `main.ts` recomputes the
   surface only when the parameters change; the slices follow the probe and
   are recomputed every render.
+- `model/thresholds.ts` clips each first-hidden-layer unit's `z = 0` line to
+  the input domain, for the map's dotted thresholds. Every intersection with
+  the rectangle's four edges, keeping the two furthest apart: that needs no
+  case analysis, and a line that grazes a corner comes out as a point and is
+  dropped rather than drawn.
 - `model/curves.ts` sweeps one parameter at a time with everything else
   held, for the "Parameters → output" panel. The caller names the parameters
   to sweep (the selected unit's). It mutates a private copy: the explorer's
   own parameters must come back untouched.
-- `state.ts` owns the baseline/working split, the selected unit, history, and
-  the one versioned snapshot every view consumes.
+- `state.ts` owns the baseline/working split, the selected unit, and the one
+  versioned snapshot every view consumes. There is **no history**: undo and
+  redo (PLAN.md section 4) were removed at the user's request, so the only
+  ways back are `Restore baseline`, `Load pre-trained` and the parameter's
+  own slider.
 - `view/adapter.ts` is the **only** place model and renderer indices meet.
 - `view/colormap.ts` owns both colour maps. `main.ts` builds one
   `Palette` per render and hands the same object to both panels.
@@ -476,11 +518,14 @@ asset contract and the golden probes) → `cli.py` (`train`/`publish`/`verify`).
   because the view box (680 units) is wider than the panel that renders it,
   so a 1-unit stroke lands under a pixel and reads as nothing at all.
 - **Selection is black, never the accent.** The accent green is a parameter
-  colour now. The selected unit's node takes a thick ink outline of its own;
+  colour now. The selected unit's node takes a thin ink outline of its own;
   each edge feeding it keeps its own colour *and* its own thickness and is
   railed by two thin ink lines, one along each side, offset along the edge's
   normal in a group inserted before `.dn-edges`. So a selection is one node
-  plus one rail pair per incoming edge, never a lone edge.
+  plus one rail pair per incoming edge, never a lone edge. One hairline does
+  all of it — the ring round the node is the same width as the rails beside
+  its edges — because what marks the unit is the ink, and a heavy ring only
+  eats into the fill it is pointing at.
 - **The parameters-to-output axis is fitted to the selected unit's sweeps,
   with 5% headroom.** It is the one axis in the app that is *not* a fixed
   scale, because a dead ReLU's sweeps move the output by almost nothing and

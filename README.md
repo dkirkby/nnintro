@@ -206,6 +206,13 @@ derivative against centered finite differences.
   regression generators are noiseless, so their splits cannot differ, and the
   classifiers' irreducible error is in the overlap of the classes rather than
   in which split a point landed in.
+- **No undo or redo**, where PLAN.md section 4 asks for both. The actions
+  were removed at the user's request, along with the explorer's history:
+  `Restore baseline` and `Load pre-trained` go back to a known state, and a
+  parameter's own slider shows where it was, so a stack of previous states
+  was a fourth way to go backwards that nothing on screen explained. The
+  slider is now the only way to edit a parameter, so there is no edit that
+  cannot be walked back by hand.
 - The plan proposes "a thin React interface". The spike uses plain TypeScript
   with no framework, matching `../mutual`; the numerical modules are already
   UI-independent, so adopting React later is additive. Revisit when the

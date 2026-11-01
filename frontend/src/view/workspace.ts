@@ -2,7 +2,8 @@
  * The panels as a canvas the reader arranges.
  *
  * Every panel is a card on a twelve-column grid: drag it by its title bar,
- * resize it by the corner, fold it down to the bar alone. The arrangement
+ * resize it by the corner, fold it down to the bar alone — by its chevron,
+ * by a click on its title, or by a double click anywhere else on the bar. The arrangement
  * is the reader's, so it is kept between sessions and `Reset layout` puts
  * it back. `view/layout.ts` owns the geometry — what pushes what, and what
  * floats where — and this module owns the elements and the gestures.
@@ -149,6 +150,12 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     fold.type = "button";
     fold.className = "panel-fold";
     fold.setAttribute("aria-expanded", "true");
+    // The chevron in a span of its own: the stylesheet scales it up there
+    // without the button's capsule growing with it.
+    const arrow = document.createElement("span");
+    arrow.className = "fold-arrow";
+    arrow.setAttribute("aria-hidden", "true");
+    fold.append(arrow);
 
     bar.append(title, fold);
 
@@ -171,7 +178,7 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     bar.addEventListener("pointerdown", (event) => startDrag(spec.id, event));
     bar.addEventListener("keydown", (event) => onKey(spec.id, event));
     bar.addEventListener("dblclick", (event) => {
-      if ((event.target as Element).closest("button")) return;
+      if ((event.target as Element).closest("button, h2")) return;
       toggle(spec.id);
     });
     fold.addEventListener("click", () => toggle(spec.id));
@@ -189,8 +196,25 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     rect: Rect;
     x: number;
     y: number;
+    /** Whether it began on the panel's name, which folds it if it goes nowhere. */
+    fromTitle: boolean;
   }
   let gesture: Gesture | null = null;
+  /**
+   * Whether the gesture in progress has moved the panel at all.
+   *
+   * The title is a second chevron — a panel folds away when its name is
+   * clicked, which is the part of the bar a reader aims at anyway — and the
+   * bar, the name included, is also the drag handle. The two are told apart
+   * by this: a press on the name that goes nowhere is a click and folds the
+   * panel, and one that moves it is a drag and folds nothing.
+   *
+   * It is the *pointer* gesture that decides, not a `click` listener,
+   * because `begin` cancels the pointerdown (to keep a drag from selecting
+   * the title's text) and a cancelled pointerdown is allowed to suppress
+   * the compatibility click that would otherwise follow.
+   */
+  let moved = false;
 
   function columnWidth(): number {
     const width = container.getBoundingClientRect().width;
@@ -210,7 +234,9 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
       section.classList.toggle("is-minimised", panel.minimised);
       const fold = folds.get(panel.id)!;
       fold.setAttribute("aria-expanded", String(!panel.minimised));
-      fold.textContent = panel.minimised ? "▸" : "▾";
+      fold.querySelector(".fold-arrow")!.textContent = panel.minimised
+        ? "▸"
+        : "▾";
       const name = titles.get(panel.id)?.textContent ?? panel.id;
       fold.setAttribute("aria-label", `${panel.minimised ? "Expand" : "Minimise"} ${name}`);
       fold.title = fold.getAttribute("aria-label")!;
@@ -247,12 +273,14 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     const panel = find(current, id);
     if (!panel) return;
     event.preventDefault();
+    moved = false;
     gesture = {
       id,
       from: current,
       rect: { x: panel.x, y: panel.y, w: panel.w, h: panel.h },
       x: event.clientX,
       y: event.clientY,
+      fromTitle: (event.target as Element | null)?.closest("h2") !== null,
     };
     sections.get(id)?.classList.add(kind === "move" ? "is-dragging" : "is-resizing");
     container.classList.add("is-arranging");
@@ -267,9 +295,13 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
       document.removeEventListener("pointermove", onMove);
       sections.get(id)?.classList.remove("is-dragging", "is-resizing");
       container.classList.remove("is-arranging");
+      const tapped = kind === "move" && !moved && gesture?.fromTitle === true;
       gesture = null;
       save();
       options.onChange?.(current);
+      // The gesture went nowhere and began on the panel's name: that is a
+      // click on the title, which folds the panel.
+      if (tapped) toggle(id);
     }
   }
 
@@ -282,6 +314,7 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     if (!gesture) return;
     const columns = Math.round((event.clientX - gesture.x) / columnWidth());
     const rows = Math.round((event.clientY - gesture.y) / ROW_HEIGHT);
+    if (columns !== 0 || rows !== 0) moved = true;
     apply(moveTo(gesture.from, gesture.id, gesture.rect.x + columns, gesture.rect.y + rows));
   }
 
